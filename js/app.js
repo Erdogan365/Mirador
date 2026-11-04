@@ -17,6 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
     userLocationMarker: null,
     mapPoints: loadSavedIncidents(),
     streams: [],
+    currentStreamId: null,
+    currentPlayingStreamId: null,
     chatMessages: [],
     myClientId: "usr_" + Math.random().toString(36).substring(2, 8)
   };
@@ -839,21 +841,23 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
 
         btn.addEventListener("click", () => {
-          document.querySelectorAll(".btn-stream-pill").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          playCitizenStream(stream.id);
+          if (state.currentStreamId !== stream.id) {
+            document.querySelectorAll(".btn-stream-pill").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            playCitizenStream(stream.id, true);
+          }
         });
 
         listContainer.appendChild(btn);
       });
     }
 
-    // Reproducir la primera si no hay una seleccionada
+    // Reproducir la primera si no hay una seleccionada (sin forzar recarga si ya está reproduciendo)
     const targetId = state.currentStreamId || state.streams[0].id;
-    playCitizenStream(targetId);
+    playCitizenStream(targetId, false);
   }
 
-  function playCitizenStream(streamId) {
+  function playCitizenStream(streamId, forceReload = false) {
     if (!state.streams) return;
     const stream = state.streams.find(s => s.id === streamId);
     if (!stream) return;
@@ -904,6 +908,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const waText = encodeURIComponent(`🔴 EN VIVO desde ${stream.location}: Sintoniza la transmisión aquí 👉 ${directLiveUrl}`);
       btnShareWa.href = `https://wa.me/?text=${waText}`;
     }
+
+    // SI YA ESTÁ REPRODUCIENDO ESTE MISMO STREAM Y EL IFRAME EXISTE, NO REINICIAR NI DESTRUIR EL REPRODUCTOR
+    const hasIframe = mediaHolder?.querySelector("iframe");
+    if (!forceReload && state.currentPlayingStreamId === streamId && hasIframe) {
+      return; // Mantener la señal corriendo sin ningún segundo de interrupción
+    }
+
+    state.currentPlayingStreamId = streamId;
 
     if (!mediaHolder) return;
     mediaHolder.innerHTML = "";
