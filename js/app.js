@@ -344,13 +344,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function loadSavedIncidents() {
     try {
-      const saved = localStorage.getItem("monitor_map_points");
+      const saved = localStorage.getItem("monitor_map_points_v2");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return Array.isArray(APP_CONFIG.mapPoints) ? [...APP_CONFIG.mapPoints] : [];
+    try {
+      localStorage.removeItem("monitor_map_points");
+    } catch (e) {}
+    return [];
   }
 
   function renderMapPoints() {
@@ -358,9 +361,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     state.markersLayer.clearLayers();
 
-    const points = (Array.isArray(state.mapPoints) && state.mapPoints.length > 0)
-      ? state.mapPoints
-      : APP_CONFIG.mapPoints;
+    const points = Array.isArray(state.mapPoints) ? state.mapPoints : [];
     let counts = { all: points.length, bloqueo: 0, restringido: 0, libre: 0, camara: 0 };
 
     points.forEach(pt => {
@@ -383,7 +384,7 @@ document.addEventListener("DOMContentLoaded", () => {
         icon: createCustomMarkerIcon(pt.status, pt.hasLiveCamera)
       });
 
-      // Contenido del Popup
+      // Contenido del Popup con acciones de Edición y Retiro
       let tagClass = "tag-bloqueo";
       if (pt.status === "restringido") tagClass = "tag-restringido";
       if (pt.status === "libre") tagClass = "tag-libre";
@@ -404,6 +405,14 @@ document.addEventListener("DOMContentLoaded", () => {
           <span style="font-size:0.7rem; color:#94a3b8; display:block; margin: 3px 0 6px;">Hora: ${pt.time}</span>
           <p>${escapeHtml(pt.description)}</p>
           ${cameraAction}
+          <div class="popup-actions-bar">
+            <button class="btn-popup-sm btn-popup-edit" onclick="window.editIncidentById('${pt.id}')">
+              <i class="fa-solid fa-pen-to-square"></i> Editar Estado
+            </button>
+            <button class="btn-popup-sm btn-popup-delete" onclick="window.deleteIncidentById('${pt.id}')">
+              <i class="fa-solid fa-trash-can"></i> Retirar
+            </button>
+          </div>
         </div>
       `;
 
@@ -427,9 +436,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!container) return;
 
     container.innerHTML = "";
-    const points = (Array.isArray(state.mapPoints) && state.mapPoints.length > 0)
-      ? state.mapPoints
-      : APP_CONFIG.mapPoints;
+    const points = Array.isArray(state.mapPoints) ? state.mapPoints : [];
+
+    if (points.length === 0) {
+      container.innerHTML = `
+        <div class="points-empty-notice">
+          <i class="fa-solid fa-map-location-dot"></i>
+          <p>No hay incidentes reportados en este momento</p>
+          <span>Usa el botón <strong>"Reportar Incidente"</strong> para registrar una vía en tiempo real.</span>
+        </div>
+      `;
+      return;
+    }
 
     points.forEach(pt => {
       let tagClass = "tag-bloqueo";
@@ -446,14 +464,21 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="point-title">${escapeHtml(pt.title)}</div>
         <div class="point-desc">${escapeHtml(pt.description)}</div>
         <div class="point-action-hint">
-          <i class="fa-solid fa-crosshairs"></i> Toca para enfocar en mapa ${pt.hasLiveCamera ? '• 📹 Con transmisión' : ''}
+          <i class="fa-solid fa-crosshairs"></i> Toca para enfocar en mapa
+        </div>
+        <div class="point-card-actions">
+          <button class="btn-card-action btn-card-edit" onclick="event.stopPropagation(); window.editIncidentById('${pt.id}')">
+            <i class="fa-solid fa-pen-to-square"></i> Editar Estado
+          </button>
+          <button class="btn-card-action btn-card-delete" onclick="event.stopPropagation(); window.deleteIncidentById('${pt.id}')">
+            <i class="fa-solid fa-trash-can"></i> Retirar
+          </button>
         </div>
       `;
 
       card.addEventListener("click", () => {
         if (!state.map) return;
         state.map.flyTo([pt.lat, pt.lng], 16, { animate: true, duration: 1.2 });
-        // Buscar el marcador correspondiente y abrir popup
         state.markersLayer.eachLayer(layer => {
           if (layer.getLatLng && 
               Math.abs(layer.getLatLng().lat - pt.lat) < 0.0001 && 
@@ -1248,12 +1273,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectZone = document.getElementById("incident-select-zone");
     const inputDesc = document.getElementById("incident-input-desc");
     const inputAuthor = document.getElementById("incident-input-author");
+    const hiddenId = document.getElementById("incident-edit-id");
+    const btnSubmit = document.getElementById("btn-submit-incident");
     const btnGps = document.getElementById("btn-incident-use-gps");
     const gpsStatus = document.getElementById("incident-gps-status");
     const radioStatus = document.querySelectorAll('input[name="incident_status"]');
 
     if (btnOpen) {
       btnOpen.addEventListener("click", () => {
+        if (hiddenId) hiddenId.value = "";
+        const modalTitle = modal?.querySelector(".modal-header h3");
+        if (modalTitle) modalTitle.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Reportar Incidente / Estado de Vía`;
+        if (btnSubmit) btnSubmit.innerHTML = `<i class="fa-solid fa-bullhorn"></i> Publicar Reporte en Tiempo Real`;
+        form?.reset();
+        document.querySelectorAll("#incident-modal .radio-card").forEach(c => c.classList.remove("active"));
+        document.getElementById("card-status-bloqueo")?.classList.add("active");
+        incidentGpsCoords = null;
+        if (btnGps) {
+          btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
+          btnGps.style.background = "";
+        }
+        if (gpsStatus) gpsStatus.textContent = "";
         modal?.classList.remove("hidden");
         setTimeout(() => inputTitle?.focus(), 100);
       });
@@ -1305,6 +1345,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (form) {
       form.addEventListener("submit", (e) => {
         e.preventDefault();
+        const editingId = hiddenId ? hiddenId.value : "";
         const title = inputTitle ? inputTitle.value.trim() : "";
         const zoneId = selectZone ? selectZone.value : "centro";
         const desc = inputDesc ? inputDesc.value.trim() : "";
@@ -1318,34 +1359,53 @@ document.addEventListener("DOMContentLoaded", () => {
         if (status === "restringido") statusLabel = "Paso Restringido";
         if (status === "libre") statusLabel = "Vía Libre / Despejada";
 
-        const defaultCoords = {
-          centro: { lat: -9.9306, lng: -76.2422 },
-          norte: { lat: -9.9142, lng: -76.2341 },
-          sur: { lat: -9.9575, lng: -76.2418 }
-        };
-        const baseCoords = incidentGpsCoords || defaultCoords[zoneId] || { lat: -9.9306, lng: -76.2422 };
-        const jitterLat = (Math.random() - 0.5) * 0.003;
-        const jitterLng = (Math.random() - 0.5) * 0.003;
         const timeNow = getCurrentTimeFormatted();
 
-        const newPoint = {
-          id: "pt-" + Date.now(),
-          title: title,
-          zoneId: zoneId,
-          lat: baseCoords.lat + (incidentGpsCoords ? 0 : jitterLat),
-          lng: baseCoords.lng + (incidentGpsCoords ? 0 : jitterLng),
-          status: status,
-          statusLabel: statusLabel,
-          time: timeNow,
-          description: `${desc} (Reportado por: ${author})`,
-          hasLiveCamera: false
-        };
+        if (editingId) {
+          // Edición de reporte existente
+          const existingIndex = state.mapPoints.findIndex(p => p.id === editingId);
+          if (existingIndex !== -1) {
+            state.mapPoints[existingIndex].title = title;
+            state.mapPoints[existingIndex].zoneId = zoneId;
+            state.mapPoints[existingIndex].status = status;
+            state.mapPoints[existingIndex].statusLabel = statusLabel;
+            state.mapPoints[existingIndex].description = `${desc} (Actualizado por: ${author})`;
+            state.mapPoints[existingIndex].time = timeNow;
+            if (incidentGpsCoords) {
+              state.mapPoints[existingIndex].lat = incidentGpsCoords.lat;
+              state.mapPoints[existingIndex].lng = incidentGpsCoords.lng;
+            }
+          }
+        } else {
+          // Creación de nuevo reporte
+          const defaultCoords = {
+            centro: { lat: -9.9306, lng: -76.2422 },
+            norte: { lat: -9.9142, lng: -76.2341 },
+            sur: { lat: -9.9575, lng: -76.2418 }
+          };
+          const baseCoords = incidentGpsCoords || defaultCoords[zoneId] || { lat: -9.9306, lng: -76.2422 };
+          const jitterLat = (Math.random() - 0.5) * 0.003;
+          const jitterLng = (Math.random() - 0.5) * 0.003;
 
-        if (!Array.isArray(state.mapPoints)) state.mapPoints = [];
-        state.mapPoints.unshift(newPoint);
+          const newPoint = {
+            id: "pt-" + Date.now(),
+            title: title,
+            zoneId: zoneId,
+            lat: baseCoords.lat + (incidentGpsCoords ? 0 : jitterLat),
+            lng: baseCoords.lng + (incidentGpsCoords ? 0 : jitterLng),
+            status: status,
+            statusLabel: statusLabel,
+            time: timeNow,
+            description: `${desc} (Reportado por: ${author})`,
+            hasLiveCamera: false
+          };
+
+          if (!Array.isArray(state.mapPoints)) state.mapPoints = [];
+          state.mapPoints.unshift(newPoint);
+        }
 
         try {
-          localStorage.setItem("monitor_map_points", JSON.stringify(state.mapPoints));
+          localStorage.setItem("monitor_map_points_v2", JSON.stringify(state.mapPoints));
         } catch (err) {}
 
         broadcastIncidentsViaWebSocket();
@@ -1356,26 +1416,78 @@ document.addEventListener("DOMContentLoaded", () => {
           zoneId: zoneId,
           zoneName: title,
           type: status === "bloqueo" ? "urgente" : (status === "restringido" ? "aviso" : "oficial"),
-          tag: statusLabel.toUpperCase(),
+          tag: editingId ? `ACTUALIZADO: ${statusLabel.toUpperCase()}` : statusLabel.toUpperCase(),
           text: `${title}: ${desc}`,
           source: author
         });
 
         closeModal();
         form.reset();
+        if (hiddenId) hiddenId.value = "";
         incidentGpsCoords = null;
         if (btnGps) {
           btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
           btnGps.style.background = "";
         }
         if (gpsStatus) gpsStatus.textContent = "";
-
-        if (state.map) {
-          state.map.flyTo([newPoint.lat, newPoint.lng], 16, { animate: true });
-        }
       });
     }
   }
+
+  // Funciones globales expuestas para editar y retirar incidentes desde popups o tarjetas
+  window.editIncidentById = function(pointId) {
+    const pt = state.mapPoints.find(p => p.id === pointId);
+    if (!pt) return;
+
+    const modal = document.getElementById("incident-modal");
+    const modalTitle = modal?.querySelector(".modal-header h3");
+    const inputTitle = document.getElementById("incident-input-title");
+    const selectZone = document.getElementById("incident-select-zone");
+    const inputDesc = document.getElementById("incident-input-desc");
+    const inputAuthor = document.getElementById("incident-input-author");
+    const hiddenId = document.getElementById("incident-edit-id");
+    const btnSubmit = document.getElementById("btn-submit-incident");
+
+    if (modalTitle) modalTitle.innerHTML = `<i class="fa-solid fa-pen-to-square"></i> Editar Incidente / Estado de Vía`;
+    if (inputTitle) inputTitle.value = pt.title || "";
+    if (selectZone) selectZone.value = pt.zoneId || "centro";
+    if (inputDesc) inputDesc.value = pt.description ? pt.description.replace(/\s*\((Reportado|Actualizado) por:.*?\)/, "") : "";
+    if (inputAuthor) inputAuthor.value = pt.author || "";
+    if (hiddenId) hiddenId.value = pt.id;
+    if (btnSubmit) btnSubmit.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Guardar Cambios en Vivo`;
+
+    document.querySelectorAll("#incident-modal input[name=\"incident_status\"]").forEach(r => {
+      r.checked = (r.value === pt.status);
+      r.closest(".radio-card")?.classList.toggle("active", r.value === pt.status);
+    });
+
+    modal?.classList.remove("hidden");
+  };
+
+  window.deleteIncidentById = function(pointId) {
+    const pt = state.mapPoints.find(p => p.id === pointId);
+    if (!pt) return;
+
+    if (confirm(`¿Deseas retirar el reporte de "${pt.title}"?\nLa vía quedará marcada como despejada y se actualizará para todos.`)) {
+      state.mapPoints = state.mapPoints.filter(p => p.id !== pointId);
+      try {
+        localStorage.setItem("monitor_map_points_v2", JSON.stringify(state.mapPoints));
+      } catch (e) {}
+
+      broadcastIncidentsViaWebSocket();
+      renderMapPoints();
+
+      addLiveFeedItem({
+        time: getCurrentTimeFormatted(),
+        zoneId: pt.zoneId || "centro",
+        zoneName: pt.title,
+        type: "oficial",
+        tag: "VÍA HABILITADA / RETIRADA",
+        text: `Se retiró el reporte de bloqueo en: ${pt.title}. Tránsito despejado.`,
+        source: "Comunidad"
+      });
+    }
+  };
 
   // =========================================================================
   // 8. CHAT CIUDADANO EN VIVO (WEBSOCKETS NATIVO)

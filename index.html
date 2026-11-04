@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=10.0">
+  <link rel="stylesheet" href="css/styles.css?v=11.0">
 </head>
 <body class="theme-dark">
 
@@ -330,6 +330,7 @@
         <button class="btn-close-modal" id="btn-close-incident-modal">&times;</button>
       </div>
       <form id="form-report-incident" class="creator-form">
+        <input type="hidden" id="incident-edit-id" value="">
         <div class="form-group">
           <label><i class="fa-solid fa-location-dot"></i> Lugar o Punto:</label>
           <input type="text" id="incident-input-title" placeholder="Ej. Puente Calicanto, Óvalo Pavletich, Vía Colectora..." required maxlength="60">
@@ -493,8 +494,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=10.0"></script>
-  <script src="js/app.js?v=10.0"></script>
+  <script src="js/data.js?v=11.0"></script>
+  <script src="js/app.js?v=11.0"></script>
 </body>
 </html>
 
