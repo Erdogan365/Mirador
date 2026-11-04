@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=9.0">
+  <link rel="stylesheet" href="css/styles.css?v=10.0">
 </head>
 <body class="theme-dark">
 
@@ -104,6 +104,9 @@
         <div class="map-extra-btns">
           <button id="btn-geolocate" class="btn-pill" title="Centrar en mi ubicación">
             <i class="fa-solid fa-location-crosshairs"></i> Mi ubicación
+          </button>
+          <button id="btn-open-incident-modal" class="btn-pill btn-pill-danger" title="Reportar bloqueo o estado de vía">
+            <i class="fa-solid fa-circle-plus"></i> Reportar Incidente
           </button>
         </div>
       </div>
@@ -232,39 +235,47 @@
       </div>
     </section>
 
-    <!-- ==================== VISTA 4: CHAT COMUNITARIO (MINNIT CHAT EN VIVO) ==================== -->
+    <!-- ==================== VISTA 4: CHAT CIUDADANO EN VIVO (WEBSOCKETS NATIVO) ==================== -->
     <section id="view-chat" class="view-panel">
       <div class="chat-wrapper">
         <div class="chat-zone-tabs-header">
           <div class="chat-zone-tabs" id="chat-zone-tabs">
-            <!-- Pestañas para cambiar el chat de zona inyectadas por JS -->
+            <!-- Pestañas para filtrar el chat inyectadas por JS: General, Norte, Centro, Sur -->
           </div>
-          <div class="chat-zone-actions">
-            <a id="btn-open-minnit-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-sm" title="Abrir chat en pantalla completa">
-              <i class="fa-solid fa-up-right-from-square"></i>
-            </a>
+          <div class="chat-online-badge">
+            <span class="live-dot-pulse"></span> <span id="chat-ws-status">En Vivo</span>
           </div>
         </div>
 
         <div class="chat-box-container">
           <div class="chat-banner-warning">
-            <i class="fa-solid fa-circle-exclamation"></i>
-            <span>Chat ciudadano en tiempo real con historial público. Los mensajes son visibles para todos. No compartas cadenas falsas.</span>
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Chat comunitario directo en tiempo real vía WebSockets. Información abierta sin registros. No compartas cadenas falsas.</span>
           </div>
 
-          <!-- Contenedor del Iframe Minnit Chat -->
-          <div class="minnit-chat-frame-container" id="minnit-chat-frame-container">
-            <iframe
-              id="minnit-chat-iframe"
-              src="about:blank"
-              class="minnit-chat-iframe"
-              allow="camera; microphone; display-capture; clipboard-write; autoplay"
-              loading="lazy">
-            </iframe>
-            <div id="minnit-loader" class="minnit-loader">
-              <i class="fa-solid fa-spinner fa-spin"></i> Conectando al chat en vivo...
-            </div>
+          <!-- Contenedor nativo de mensajes -->
+          <div class="native-chat-messages" id="chat-messages-container">
+            <!-- Burbujas de mensajes inyectadas dinámicamente -->
           </div>
+
+          <!-- Formulario para escribir mensaje -->
+          <form id="chat-send-form" class="native-chat-input-bar">
+            <div class="chat-input-row">
+              <input type="text" id="chat-input-user" class="chat-name-input" placeholder="Tu alias / nombre..." maxlength="25" required>
+              <select id="chat-select-zone" class="chat-zone-select">
+                <option value="general">📢 Canal General</option>
+                <option value="centro">Zona Centro</option>
+                <option value="sur">Zona Sur</option>
+                <option value="norte">Zona Norte</option>
+              </select>
+            </div>
+            <div class="chat-input-submit-row">
+              <input type="text" id="chat-input-message" class="chat-text-input" placeholder="Escribe un mensaje, reporte o alerta..." maxlength="250" autocomplete="off" required>
+              <button type="submit" id="chat-btn-send" class="btn-send-chat" title="Enviar mensaje">
+                <i class="fa-solid fa-paper-plane"></i>
+              </button>
+            </div>
+          </form>
         </div>
 
         <!-- Botón para reportar por WhatsApp oficial -->
@@ -272,8 +283,8 @@
           <div class="wa-content">
             <i class="fa-brands fa-whatsapp wa-big-icon"></i>
             <div>
-              <h4>¿Tienes fotos o reportes urgentes?</h4>
-              <p>Envía tu información verificada a la central de coordinación comunitaria.</p>
+              <h4>¿Tienes fotos o videos urgentes?</h4>
+              <p>Envía tu información verificada a la central de coordinación ciudadana.</p>
             </div>
           </div>
           <a id="btn-wa-report" href="https://wa.me/?text=Hola,%20deseo%20reportar%20una%20incidencia%20en%20el%20paro" target="_blank" rel="noopener noreferrer" class="btn-whatsapp">
@@ -308,6 +319,82 @@
         </button>
         <button id="btn-modal-close" class="btn-secondary">Entendido / Cerrar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL REPORTAR INCIDENTE / ESTADO DE VÍA ==================== -->
+  <div id="incident-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> Reportar Incidente / Estado de Vía</h3>
+        <button class="btn-close-modal" id="btn-close-incident-modal">&times;</button>
+      </div>
+      <form id="form-report-incident" class="creator-form">
+        <div class="form-group">
+          <label><i class="fa-solid fa-location-dot"></i> Lugar o Punto:</label>
+          <input type="text" id="incident-input-title" placeholder="Ej. Puente Calicanto, Óvalo Pavletich, Vía Colectora..." required maxlength="60">
+        </div>
+
+        <div class="form-group">
+          <label><i class="fa-solid fa-map"></i> Sector / Zona:</label>
+          <select id="incident-select-zone" class="custom-select">
+            <option value="centro">Zona Centro (Plaza de Armas / Mercados / Calicanto)</option>
+            <option value="sur">Zona Sur (Cayhuayna / Pillco Marca / UDH - UNHEVAL)</option>
+            <option value="norte">Zona Norte (Fonavi / Pavletich / Salida Tingo María)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label><i class="fa-solid fa-traffic-light"></i> Estado de la Vía:</label>
+          <div class="stream-type-selector">
+            <label class="radio-card active" id="card-status-bloqueo">
+              <input type="radio" name="incident_status" value="bloqueo" checked>
+              <div class="radio-content">
+                <strong style="color: #ef4444;"><i class="fa-solid fa-road-barrier"></i> Bloqueo Total</strong>
+                <span>Piedras, llantas, piquete. Vía completamente cerrada al tránsito.</span>
+              </div>
+            </label>
+            <label class="radio-card" id="card-status-restringido">
+              <input type="radio" name="incident_status" value="restringido">
+              <div class="radio-content">
+                <strong style="color: #f59e0b;"><i class="fa-solid fa-triangle-exclamation"></i> Paso Restringido / Intermitente</strong>
+                <span>Pase parcial cada cierto tiempo, resguardo policial o solo peatonal.</span>
+              </div>
+            </label>
+            <label class="radio-card" id="card-status-libre">
+              <input type="radio" name="incident_status" value="libre">
+              <div class="radio-content">
+                <strong style="color: #10b981;"><i class="fa-solid fa-check"></i> Vía Despejada / Libre</strong>
+                <span>Tránsito fluido sin manifestantes ni obstáculos en este momento.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label><i class="fa-solid fa-comment-dots"></i> Detalle de lo que ocurre:</label>
+          <textarea id="incident-input-desc" rows="3" class="custom-textarea" placeholder="Describe brevemente lo que ocurre en el lugar..." required maxlength="220"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label><i class="fa-solid fa-user"></i> Tu nombre o medio (opcional):</label>
+          <input type="text" id="incident-input-author" placeholder="Ej. Vecino de Cayhuayna, Conductor..." maxlength="35">
+        </div>
+
+        <div class="form-group">
+          <button type="button" id="btn-incident-use-gps" class="btn-sm btn-accent" style="justify-content:center;">
+            <i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta
+          </button>
+          <span id="incident-gps-status" style="font-size:0.75rem; color:#94a3b8; text-align:center;"></span>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-cancel-incident">Cancelar</button>
+          <button type="submit" class="btn-primary" id="btn-submit-incident">
+            <i class="fa-solid fa-bullhorn"></i> Publicar Reporte en Tiempo Real
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -406,8 +493,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=9.0"></script>
-  <script src="js/app.js?v=9.0"></script>
+  <script src="js/data.js?v=10.0"></script>
+  <script src="js/app.js?v=10.0"></script>
 </body>
 </html>
 

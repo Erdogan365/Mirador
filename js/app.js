@@ -8,15 +8,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const state = {
     currentView: "mapa",
     currentZoneId: APP_CONFIG.zones[0]?.id || "norte",
-    currentChatZoneId: APP_CONFIG.zones[0]?.id || "norte",
+    currentChatZoneId: "general",
+    currentChatFilter: "all",
     activeMapFilter: "all",
     soundEnabled: true,
     map: null,
     markersLayer: null,
     userLocationMarker: null,
-    jitsiApi: null,
-    currentRoom: null,
-    chatMessages: JSON.parse(JSON.stringify(APP_CONFIG.chatHistory))
+    mapPoints: loadSavedIncidents(),
+    streams: [],
+    chatMessages: [],
+    myClientId: "usr_" + Math.random().toString(36).substring(2, 8)
   };
 
   // =========================================================================
@@ -28,6 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try { initAlertTicker(); } catch (e) { console.warn("Alert ticker error:", e); }
     try { initCitizenStreams(); } catch (e) { console.warn("Citizen streams error:", e); }
     try { initWebSocketSync(); } catch (e) { console.warn("WebSocket sync error:", e); }
+    try { initIncidentReporting(); } catch (e) { console.warn("Incident reporting error:", e); }
     try { initMap(); } catch (e) { console.warn("Map error:", e); }
     try { initLiveFeed(); } catch (e) { console.warn("Feed error:", e); }
     try { initChat(); } catch (e) { console.warn("Chat error:", e); }
@@ -339,12 +342,25 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function loadSavedIncidents() {
+    try {
+      const saved = localStorage.getItem("monitor_map_points");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return Array.isArray(APP_CONFIG.mapPoints) ? [...APP_CONFIG.mapPoints] : [];
+  }
+
   function renderMapPoints() {
     if (!state.map || !state.markersLayer) return;
 
     state.markersLayer.clearLayers();
 
-    const points = APP_CONFIG.mapPoints;
+    const points = (Array.isArray(state.mapPoints) && state.mapPoints.length > 0)
+      ? state.mapPoints
+      : APP_CONFIG.mapPoints;
     let counts = { all: points.length, bloqueo: 0, restringido: 0, libre: 0, camara: 0 };
 
     points.forEach(pt => {
@@ -383,10 +399,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const popupHtml = `
         <div class="map-popup-body">
-          <h4>${pt.title}</h4>
+          <h4>${escapeHtml(pt.title)}</h4>
           <span class="point-status-tag ${tagClass}">${pt.statusLabel}</span>
           <span style="font-size:0.7rem; color:#94a3b8; display:block; margin: 3px 0 6px;">Hora: ${pt.time}</span>
-          <p>${pt.description}</p>
+          <p>${escapeHtml(pt.description)}</p>
           ${cameraAction}
         </div>
       `;
@@ -411,7 +427,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!container) return;
 
     container.innerHTML = "";
-    APP_CONFIG.mapPoints.forEach(pt => {
+    const points = (Array.isArray(state.mapPoints) && state.mapPoints.length > 0)
+      ? state.mapPoints
+      : APP_CONFIG.mapPoints;
+
+    points.forEach(pt => {
       let tagClass = "tag-bloqueo";
       if (pt.status === "restringido") tagClass = "tag-restringido";
       if (pt.status === "libre") tagClass = "tag-libre";
@@ -423,8 +443,8 @@ document.addEventListener("DOMContentLoaded", () => {
           <span class="point-status-tag ${tagClass}">${pt.statusLabel}</span>
           <span class="point-time"><i class="fa-regular fa-clock"></i> ${pt.time}</span>
         </div>
-        <div class="point-title">${pt.title}</div>
-        <div class="point-desc">${pt.description}</div>
+        <div class="point-title">${escapeHtml(pt.title)}</div>
+        <div class="point-desc">${escapeHtml(pt.description)}</div>
         <div class="point-action-hint">
           <i class="fa-solid fa-crosshairs"></i> Toca para enfocar en mapa ${pt.hasLiveCamera ? '• 📹 Con transmisión' : ''}
         </div>
@@ -441,7 +461,6 @@ document.addEventListener("DOMContentLoaded", () => {
             layer.openPopup();
           }
         });
-        // Scroll suave hacia el mapa en móviles
         document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" });
       });
 
@@ -573,14 +592,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // =========================================================================
   // SINCRONIZACIÓN WEBSOCKETS EN TIEMPO REAL (CELULAR <-> PC Y EN VIVO)
   // =========================================================================
+  const MQTT_TOPICS = {
+    streams: "mirador_udh_paro/citizen_streams_v1",
+    incidents: "mirador_udh_paro/incidents_v1",
+    chat: "mirador_udh_paro/chat_v1"
+  };
+
   const MQTT_SYNC = {
     host: "broker.emqx.io",
     port: 8084,
     path: "/mqtt",
-    topic: "mirador_udh_paro/citizen_streams_v1",
     client: null,
     connected: false,
-    pendingPayload: null
+    pendingStreamsPayload: null,
+    pendingIncidentsPayload: null
   };
 
   function initWebSocketSync() {
@@ -595,6 +620,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       MQTT_SYNC.client.onConnectionLost = function(responseObject) {
         MQTT_SYNC.connected = false;
+        const wsBadge = document.getElementById("chat-ws-status");
+        if (wsBadge) wsBadge.textContent = "Reconectando...";
         if (responseObject.errorCode !== 0) {
           console.warn("WebSocket reconectando en 4s...", responseObject.errorMessage);
           setTimeout(initWebSocketSync, 4000);
@@ -603,8 +630,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       MQTT_SYNC.client.onMessageArrived = function(message) {
         try {
+          const topic = message.destinationName;
           const payload = JSON.parse(message.payloadString);
-          if (Array.isArray(payload)) {
+
+          // 1. TRANSMISIONES EN VIVO
+          if (topic === MQTT_TOPICS.streams && Array.isArray(payload)) {
             const currentStr = JSON.stringify(state.streams || []);
             const newStr = JSON.stringify(payload);
             if (currentStr !== newStr) {
@@ -612,6 +642,21 @@ document.addEventListener("DOMContentLoaded", () => {
               try { localStorage.setItem("monitor_citizen_streams", newStr); } catch (e) { }
               renderCitizenStreamsList();
             }
+          }
+          // 2. INCIDENTES Y BLOQUEOS DE VÍAS
+          else if (topic === MQTT_TOPICS.incidents && Array.isArray(payload)) {
+            const currentStr = JSON.stringify(state.mapPoints || []);
+            const newStr = JSON.stringify(payload);
+            if (currentStr !== newStr) {
+              state.mapPoints = payload;
+              try { localStorage.setItem("monitor_map_points", newStr); } catch (e) { }
+              renderMapPoints();
+              if (state.soundEnabled) playAlertSound();
+            }
+          }
+          // 3. CHAT COMUNITARIO EN VIVO
+          else if (topic === MQTT_TOPICS.chat && payload && payload.text) {
+            handleIncomingChatMessage(payload);
           }
         } catch (err) {
           console.warn("Mensaje MQTT no es JSON:", err);
@@ -625,22 +670,27 @@ document.addEventListener("DOMContentLoaded", () => {
         onSuccess: function() {
           MQTT_SYNC.connected = true;
           console.log("🟢 WebSockets en Vivo Conectado a la Red.");
-          MQTT_SYNC.client.subscribe(MQTT_SYNC.topic, { qos: 1 });
-          if (MQTT_SYNC.pendingPayload) {
-            try {
-              const msg = new Paho.MQTT.Message(MQTT_SYNC.pendingPayload);
-              msg.destinationName = MQTT_SYNC.topic;
-              msg.retained = true;
-              msg.qos = 1;
-              MQTT_SYNC.client.send(msg);
-              MQTT_SYNC.pendingPayload = null;
-            } catch (e) {
-              console.warn("Error enviando payload pendiente:", e);
-            }
+          const wsBadge = document.getElementById("chat-ws-status");
+          if (wsBadge) wsBadge.textContent = "En Vivo";
+
+          MQTT_SYNC.client.subscribe(MQTT_TOPICS.streams, { qos: 1 });
+          MQTT_SYNC.client.subscribe(MQTT_TOPICS.incidents, { qos: 1 });
+          MQTT_SYNC.client.subscribe(MQTT_TOPICS.chat, { qos: 1 });
+
+          // Despachar payloads pendientes si los hubiera
+          if (MQTT_SYNC.pendingStreamsPayload) {
+            broadcastStreamsViaWebSocket();
+            MQTT_SYNC.pendingStreamsPayload = null;
+          }
+          if (MQTT_SYNC.pendingIncidentsPayload) {
+            broadcastIncidentsViaWebSocket();
+            MQTT_SYNC.pendingIncidentsPayload = null;
           }
         },
         onFailure: function(err) {
           MQTT_SYNC.connected = false;
+          const wsBadge = document.getElementById("chat-ws-status");
+          if (wsBadge) wsBadge.textContent = "Sin Conexión";
           console.warn("Fallo al conectar WebSocket, reintentando...", err);
           setTimeout(initWebSocketSync, 5000);
         }
@@ -655,15 +705,45 @@ document.addEventListener("DOMContentLoaded", () => {
     if (MQTT_SYNC.client && MQTT_SYNC.connected) {
       try {
         const msg = new Paho.MQTT.Message(payload);
-        msg.destinationName = MQTT_SYNC.topic;
-        msg.retained = true; // Retenido en broker: garantiza que quien abra la web reciba los en vivos activos
+        msg.destinationName = MQTT_TOPICS.streams;
+        msg.retained = true;
         msg.qos = 1;
         MQTT_SYNC.client.send(msg);
       } catch (err) {
-        console.warn("Error enviando por WebSocket:", err);
+        console.warn("Error enviando streams por WebSocket:", err);
       }
     } else {
-      MQTT_SYNC.pendingPayload = payload;
+      MQTT_SYNC.pendingStreamsPayload = payload;
+    }
+  }
+
+  function broadcastIncidentsViaWebSocket() {
+    const payload = JSON.stringify(state.mapPoints || []);
+    if (MQTT_SYNC.client && MQTT_SYNC.connected) {
+      try {
+        const msg = new Paho.MQTT.Message(payload);
+        msg.destinationName = MQTT_TOPICS.incidents;
+        msg.retained = true; // Retenido para que cualquier nuevo visitante reciba los puntos actualizados
+        msg.qos = 1;
+        MQTT_SYNC.client.send(msg);
+      } catch (err) {
+        console.warn("Error enviando incidentes por WebSocket:", err);
+      }
+    } else {
+      MQTT_SYNC.pendingIncidentsPayload = payload;
+    }
+  }
+
+  function broadcastChatMessageViaWebSocket(chatMsg) {
+    if (MQTT_SYNC.client && MQTT_SYNC.connected) {
+      try {
+        const msg = new Paho.MQTT.Message(JSON.stringify(chatMsg));
+        msg.destinationName = MQTT_TOPICS.chat;
+        msg.qos = 1;
+        MQTT_SYNC.client.send(msg);
+      } catch (err) {
+        console.warn("Error enviando chat por WebSocket:", err);
+      }
     }
   }
 
@@ -1154,63 +1234,293 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // 7. CHAT ZONAL COMUNITARIO EN VIVO (MINNIT CHAT)
+  // 7. REPORTE CIUDADANO DE INCIDENTES / ESTADO DE VÍA (SINCRONIZADO)
   // =========================================================================
+  let incidentGpsCoords = null;
+
+  function initIncidentReporting() {
+    const btnOpen = document.getElementById("btn-open-incident-modal");
+    const modal = document.getElementById("incident-modal");
+    const btnClose = document.getElementById("btn-close-incident-modal");
+    const btnCancel = document.getElementById("btn-cancel-incident");
+    const form = document.getElementById("form-report-incident");
+    const inputTitle = document.getElementById("incident-input-title");
+    const selectZone = document.getElementById("incident-select-zone");
+    const inputDesc = document.getElementById("incident-input-desc");
+    const inputAuthor = document.getElementById("incident-input-author");
+    const btnGps = document.getElementById("btn-incident-use-gps");
+    const gpsStatus = document.getElementById("incident-gps-status");
+    const radioStatus = document.querySelectorAll('input[name="incident_status"]');
+
+    if (btnOpen) {
+      btnOpen.addEventListener("click", () => {
+        modal?.classList.remove("hidden");
+        setTimeout(() => inputTitle?.focus(), 100);
+      });
+    }
+
+    const closeModal = () => modal?.classList.add("hidden");
+    if (btnClose) btnClose.addEventListener("click", closeModal);
+    if (btnCancel) btnCancel.addEventListener("click", closeModal);
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+
+    radioStatus.forEach(radio => {
+      radio.addEventListener("change", () => {
+        document.querySelectorAll("#incident-modal .radio-card").forEach(c => c.classList.remove("active"));
+        radio.closest(".radio-card")?.classList.add("active");
+      });
+    });
+
+    if (btnGps) {
+      btnGps.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          alert("Tu navegador no soporta geolocalización.");
+          return;
+        }
+        btnGps.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo ubicación GPS...`;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            incidentGpsCoords = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude
+            };
+            btnGps.innerHTML = `<i class="fa-solid fa-circle-check"></i> Ubicación GPS fijada`;
+            btnGps.style.background = "#10b981";
+            if (gpsStatus) gpsStatus.textContent = `Coordenadas: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+          },
+          (err) => {
+            console.warn("Error GPS incidente:", err);
+            btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
+            if (gpsStatus) gpsStatus.textContent = "No se pudo obtener GPS (permiso denegado)";
+          },
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const title = inputTitle ? inputTitle.value.trim() : "";
+        const zoneId = selectZone ? selectZone.value : "centro";
+        const desc = inputDesc ? inputDesc.value.trim() : "";
+        const author = (inputAuthor && inputAuthor.value.trim()) || "Vecino en el punto";
+        const statusSelected = document.querySelector('input[name="incident_status"]:checked');
+        const status = statusSelected ? statusSelected.value : "bloqueo";
+
+        if (!title || !desc) return;
+
+        let statusLabel = "Bloqueo Total";
+        if (status === "restringido") statusLabel = "Paso Restringido";
+        if (status === "libre") statusLabel = "Vía Libre / Despejada";
+
+        const defaultCoords = {
+          centro: { lat: -9.9306, lng: -76.2422 },
+          norte: { lat: -9.9142, lng: -76.2341 },
+          sur: { lat: -9.9575, lng: -76.2418 }
+        };
+        const baseCoords = incidentGpsCoords || defaultCoords[zoneId] || { lat: -9.9306, lng: -76.2422 };
+        const jitterLat = (Math.random() - 0.5) * 0.003;
+        const jitterLng = (Math.random() - 0.5) * 0.003;
+        const timeNow = getCurrentTimeFormatted();
+
+        const newPoint = {
+          id: "pt-" + Date.now(),
+          title: title,
+          zoneId: zoneId,
+          lat: baseCoords.lat + (incidentGpsCoords ? 0 : jitterLat),
+          lng: baseCoords.lng + (incidentGpsCoords ? 0 : jitterLng),
+          status: status,
+          statusLabel: statusLabel,
+          time: timeNow,
+          description: `${desc} (Reportado por: ${author})`,
+          hasLiveCamera: false
+        };
+
+        if (!Array.isArray(state.mapPoints)) state.mapPoints = [];
+        state.mapPoints.unshift(newPoint);
+
+        try {
+          localStorage.setItem("monitor_map_points", JSON.stringify(state.mapPoints));
+        } catch (err) {}
+
+        broadcastIncidentsViaWebSocket();
+        renderMapPoints();
+
+        addLiveFeedItem({
+          time: timeNow,
+          zoneId: zoneId,
+          zoneName: title,
+          type: status === "bloqueo" ? "urgente" : (status === "restringido" ? "aviso" : "oficial"),
+          tag: statusLabel.toUpperCase(),
+          text: `${title}: ${desc}`,
+          source: author
+        });
+
+        closeModal();
+        form.reset();
+        incidentGpsCoords = null;
+        if (btnGps) {
+          btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
+          btnGps.style.background = "";
+        }
+        if (gpsStatus) gpsStatus.textContent = "";
+
+        if (state.map) {
+          state.map.flyTo([newPoint.lat, newPoint.lng], 16, { animate: true });
+        }
+      });
+    }
+  }
+
+  // =========================================================================
+  // 8. CHAT CIUDADANO EN VIVO (WEBSOCKETS NATIVO)
+  // =========================================================================
+  function loadSavedChat() {
+    try {
+      const saved = localStorage.getItem("monitor_chat_history_v2");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      { id: "msg-1", user: "Coordinación Huánuco", zoneId: "general", text: "Bienvenidos al chat ciudadano en vivo. Comparte reportes verificados del estado de vías.", time: "08:00 AM" }
+    ];
+  }
+
+  function handleIncomingChatMessage(payload) {
+    if (!payload || !payload.text) return;
+    if (!Array.isArray(state.chatMessages)) state.chatMessages = [];
+
+    const exists = state.chatMessages.some(m => m.id === payload.id);
+    if (!exists) {
+      state.chatMessages.push(payload);
+      if (state.chatMessages.length > 120) state.chatMessages.shift();
+      try {
+        localStorage.setItem("monitor_chat_history_v2", JSON.stringify(state.chatMessages));
+      } catch (e) {}
+      renderChatMessages();
+    }
+  }
+
   function initChat() {
+    state.chatMessages = loadSavedChat();
+    state.currentChatFilter = "all";
+
     const tabsContainer = document.getElementById("chat-zone-tabs");
-    const iframe = document.getElementById("minnit-chat-iframe");
-    const loader = document.getElementById("minnit-loader");
-    const externalLink = document.getElementById("btn-open-minnit-external");
+    const form = document.getElementById("chat-send-form");
+    const inputUser = document.getElementById("chat-input-user");
+    const inputMsg = document.getElementById("chat-input-message");
+    const selectZone = document.getElementById("chat-select-zone");
+
+    const savedAlias = localStorage.getItem("monitor_chat_alias");
+    if (savedAlias && inputUser) inputUser.value = savedAlias;
 
     if (tabsContainer) {
       tabsContainer.innerHTML = "";
-      APP_CONFIG.zones.forEach((zone, index) => {
+      const filterOptions = [
+        { id: "all", name: "📢 Todos" },
+        { id: "centro", name: "Zona Centro" },
+        { id: "sur", name: "Zona Sur" },
+        { id: "norte", name: "Zona Norte" }
+      ];
+
+      filterOptions.forEach(opt => {
         const chip = document.createElement("button");
         chip.type = "button";
-        chip.className = `chat-tab-chip ${zone.id === state.currentChatZoneId ? "active" : ""}`;
-        chip.dataset.zoneId = zone.id;
-        chip.innerHTML = `<i class="fa-solid fa-comments"></i> Chat ${zone.name}`;
-
+        chip.className = `chat-tab-chip ${opt.id === "all" ? "active" : ""}`;
+        chip.textContent = opt.name;
         chip.addEventListener("click", () => {
           document.querySelectorAll(".chat-tab-chip").forEach(c => c.classList.remove("active"));
           chip.classList.add("active");
-          state.currentChatZoneId = zone.id;
-          loadMinnitChat(zone.id);
+          state.currentChatFilter = opt.id;
+          renderChatMessages();
         });
-
         tabsContainer.appendChild(chip);
       });
     }
 
-    if (iframe && loader) {
-      iframe.addEventListener("load", () => {
-        loader.style.display = "none";
+    renderChatMessages();
+
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const user = (inputUser && inputUser.value.trim()) || "Ciudadano";
+        const text = inputMsg ? inputMsg.value.trim() : "";
+        const zoneId = selectZone ? selectZone.value : "general";
+
+        if (!text) return;
+
+        localStorage.setItem("monitor_chat_alias", user);
+
+        const newMsg = {
+          id: "msg-" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+          user: user,
+          zoneId: zoneId,
+          text: text,
+          time: getCurrentTimeFormatted(),
+          senderId: state.myClientId
+        };
+
+        state.chatMessages.push(newMsg);
+        try {
+          localStorage.setItem("monitor_chat_history_v2", JSON.stringify(state.chatMessages));
+        } catch (err) {}
+
+        broadcastChatMessageViaWebSocket(newMsg);
+
+        inputMsg.value = "";
+        renderChatMessages();
       });
     }
-
-    // Cargar la sala inicial
-    loadMinnitChat(state.currentChatZoneId);
   }
 
-  function loadMinnitChat(zoneId) {
-    const zone = APP_CONFIG.zones.find(z => z.id === zoneId) || APP_CONFIG.zones[0];
-    const iframe = document.getElementById("minnit-chat-iframe");
-    const loader = document.getElementById("minnit-loader");
-    const externalLink = document.getElementById("btn-open-minnit-external");
+  function renderChatMessages() {
+    const container = document.getElementById("chat-messages-container");
+    if (!container) return;
 
-    if (!zone || !iframe) return;
+    container.innerHTML = "";
 
-    // Nombre de la sala en Minnit Chat
-    const roomName = zone.minnitRoom || `ParoHuanuco_${zone.id}`;
-    const minnitUrl = `https://minnit.chat/${roomName}?embed&web`;
+    const filter = state.currentChatFilter || "all";
+    const messages = (state.chatMessages || []).filter(m => {
+      if (filter === "all") return true;
+      return m.zoneId === filter;
+    });
 
-    if (loader) loader.style.display = "flex";
-    iframe.src = minnitUrl;
-
-    if (externalLink) {
-      externalLink.href = `https://minnit.chat/${roomName}`;
-      externalLink.title = `Abrir Chat de ${zone.name} en ventana completa`;
+    if (messages.length === 0) {
+      container.innerHTML = `<div style="text-align:center; padding:24px; color:#94a3b8; font-size:0.8rem;">No hay mensajes en este canal aún. ¡Sé el primero en reportar!</div>`;
+      return;
     }
+
+    const zoneNames = {
+      general: "General",
+      centro: "Centro",
+      sur: "Sur",
+      norte: "Norte"
+    };
+
+    messages.forEach(msg => {
+      const isMine = msg.senderId && msg.senderId === state.myClientId;
+      const bubble = document.createElement("div");
+      bubble.className = `chat-bubble ${isMine ? "mine" : "other"}`;
+
+      bubble.innerHTML = `
+        <div class="chat-bubble-header">
+          <span class="chat-bubble-author">${escapeHtml(msg.user || "Vecino")}</span>
+          <div>
+            <span class="chat-bubble-zone">${zoneNames[msg.zoneId] || "Sector"}</span>
+            <span class="chat-bubble-time">${msg.time}</span>
+          </div>
+        </div>
+        <div class="chat-bubble-text">${escapeHtml(msg.text)}</div>
+      `;
+
+      container.appendChild(bubble);
+    });
+
+    container.scrollTop = container.scrollHeight;
   }
 
   // =========================================================================
