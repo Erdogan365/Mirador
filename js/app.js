@@ -69,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentStreamId: null,
     currentPlayingStreamId: null,
     chatMessages: [],
+    streamChatMessages: [],
     myClientId: getOrCreateClientId(),
     tempPickerMarker: null,
     isPickingLocationOnMap: false
@@ -649,6 +650,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btnEnd) btnEnd.addEventListener("click", () => endCurrentStream());
     if (btnEndFooter) btnEndFooter.addEventListener("click", () => endCurrentStream());
 
+    // Botón para reportar incidente desde el mismo En Vivo sin salir de la transmisión
+    const btnReportFromLive = document.getElementById("btn-envivo-report-incident");
+    if (btnReportFromLive) {
+      btnReportFromLive.addEventListener("click", () => {
+        const btnOpen = document.getElementById("btn-open-incident-modal");
+        if (btnOpen) btnOpen.click();
+      });
+    }
+
+    try { initStreamLiveChat(); } catch (e) { console.warn("Live chat error:", e); }
+
     renderCitizenStreamsList();
   }
 
@@ -696,7 +708,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const MQTT_TOPICS = {
     streams: "mirador_udh_paro/citizen_streams_v1",
     incidents: "mirador_udh_paro/incidents_v1",
-    chat: "mirador_udh_paro/chat_v1"
+    chat: "mirador_udh_paro/chat_v1",
+    streamChat: "mirador_udh_paro/stream_chat_v1"
   };
 
   const MQTT_SYNC = {
@@ -759,6 +772,10 @@ document.addEventListener("DOMContentLoaded", () => {
           else if (topic === MQTT_TOPICS.chat && payload && payload.text) {
             handleIncomingChatMessage(payload);
           }
+          // 4. CHAT DIRECTO DEL EN VIVO
+          else if (topic === MQTT_TOPICS.streamChat && payload && payload.text) {
+            handleIncomingStreamChatMessage(payload);
+          }
         } catch (err) {
           console.warn("Mensaje MQTT no es JSON:", err);
         }
@@ -777,6 +794,7 @@ document.addEventListener("DOMContentLoaded", () => {
           MQTT_SYNC.client.subscribe(MQTT_TOPICS.streams, { qos: 1 });
           MQTT_SYNC.client.subscribe(MQTT_TOPICS.incidents, { qos: 1 });
           MQTT_SYNC.client.subscribe(MQTT_TOPICS.chat, { qos: 1 });
+          MQTT_SYNC.client.subscribe(MQTT_TOPICS.streamChat, { qos: 1 });
 
           // Despachar payloads pendientes si los hubiera
           if (MQTT_SYNC.pendingStreamsPayload) {
@@ -846,6 +864,109 @@ document.addEventListener("DOMContentLoaded", () => {
         console.warn("Error enviando chat por WebSocket:", err);
       }
     }
+  }
+
+  function broadcastStreamChatMessageViaWebSocket(chatMsg) {
+    if (MQTT_SYNC.client && MQTT_SYNC.connected) {
+      try {
+        const msg = new Paho.MQTT.Message(JSON.stringify(chatMsg));
+        msg.destinationName = MQTT_TOPICS.streamChat;
+        msg.qos = 1;
+        MQTT_SYNC.client.send(msg);
+      } catch (err) {
+        console.warn("Error enviando stream chat por WebSocket:", err);
+      }
+    }
+  }
+
+  function initStreamLiveChat() {
+    const form = document.getElementById("form-stream-chat");
+    const inputUser = document.getElementById("stream-chat-input-user");
+    const inputText = document.getElementById("stream-chat-input-text");
+    const quickTags = document.querySelectorAll(".quick-chat-tag");
+
+    const savedAlias = localStorage.getItem("monitor_chat_alias");
+    if (savedAlias && inputUser) inputUser.value = savedAlias;
+
+    quickTags.forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (inputText) {
+          inputText.value = btn.dataset.msg || btn.textContent.trim();
+          inputText.focus();
+        }
+      });
+    });
+
+    renderStreamChatMessages();
+
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const user = (inputUser && inputUser.value.trim()) || "Vecino";
+        const text = inputText ? inputText.value.trim() : "";
+        if (!text) return;
+
+        localStorage.setItem("monitor_chat_alias", user);
+
+        const newMsg = {
+          id: "sc-" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+          user: user,
+          text: text,
+          time: getCurrentTimeFormatted(),
+          senderId: state.myClientId,
+          streamId: state.currentStreamId || "general"
+        };
+
+        if (!Array.isArray(state.streamChatMessages)) state.streamChatMessages = [];
+        state.streamChatMessages.push(newMsg);
+
+        broadcastStreamChatMessageViaWebSocket(newMsg);
+        renderStreamChatMessages();
+        inputText.value = "";
+      });
+    }
+  }
+
+  function handleIncomingStreamChatMessage(msg) {
+    if (!msg || !msg.id) return;
+    if (msg.senderId === state.myClientId) return;
+    if (!Array.isArray(state.streamChatMessages)) state.streamChatMessages = [];
+    if (!state.streamChatMessages.some(m => m.id === msg.id)) {
+      state.streamChatMessages.push(msg);
+      renderStreamChatMessages();
+    }
+  }
+
+  function renderStreamChatMessages() {
+    const container = document.getElementById("stream-chat-messages");
+    if (!container) return;
+
+    if (!Array.isArray(state.streamChatMessages) || state.streamChatMessages.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:18px 8px; color:#64748b; font-size:0.75rem;">
+          <i class="fa-regular fa-comment-dots" style="font-size:1.1rem; margin-bottom:4px; display:block;"></i>
+          Sé el primero en comentar o preguntar al reportero en directo.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = "";
+    state.streamChatMessages.forEach(msg => {
+      const isMine = msg.senderId && msg.senderId === state.myClientId;
+      const row = document.createElement("div");
+      row.className = `stream-chat-msg-row ${isMine ? "mine" : ""}`;
+      row.innerHTML = `
+        <div class="stream-chat-msg-header">
+          <span class="stream-chat-author">${escapeHtml(msg.user || "Vecino")}</span>
+          <span class="stream-chat-time">${msg.time}</span>
+        </div>
+        <div class="stream-chat-body">${escapeHtml(msg.text)}</div>
+      `;
+      container.appendChild(row);
+    });
+
+    container.scrollTop = container.scrollHeight;
   }
 
   function saveStreams() {
@@ -1023,7 +1144,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const modeParam = isScreen ? "&screenshare" : "&webcam";
     const facingParam = isScreen ? "" : `&facing=${facing}`;
     // &webcam o &screenshare junto con &autostart omite la pantalla de selección en inglés
-    iframe.src = `https://vdo.ninja/?push=${roomName}${modeParam}&autostart${facingParam}&lang=es&quality=2&bitrate=1200&audiobitrate=64&cleanoutput=1&label=${encodeURIComponent(author || "Reportero")}`;
+    iframe.src = `https://vdo.ninja/?push=${roomName}${modeParam}&autostart${facingParam}&lang=es&quality=2&bitrate=1200&audiobitrate=64&cleanoutput=1&noocclusion&keepaspect=1&label=${encodeURIComponent(author || "Reportero")}`;
     iframe.allow = "camera; microphone; fullscreen; display-capture; autoplay";
     iframe.allowFullscreen = true;
     iframe.style.width = "100%";
@@ -1037,7 +1158,7 @@ document.addEventListener("DOMContentLoaded", () => {
     container.innerHTML = "";
     const iframe = document.createElement("iframe");
     // &blur llena los laterales de videos verticales con desenfoque dinámico y &scale=100 maximiza el tamaño
-    iframe.src = `https://vdo.ninja/?view=${roomName}&autoplay=1&cleanoutput=1&controls=1&blur&scale=100&lang=es`;
+    iframe.src = `https://vdo.ninja/?view=${roomName}&autoplay=1&cleanoutput=1&controls=1&blur&scale=100&lang=es&noocclusion&keepaspect=1`;
     iframe.allow = "autoplay; camera; microphone; fullscreen; display-capture; picture-in-picture";
     iframe.allowFullscreen = true;
     iframe.style.width = "100%";

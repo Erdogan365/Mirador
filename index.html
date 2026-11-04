@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=13.0">
+  <link rel="stylesheet" href="css/styles.css?v=14.0">
 </head>
 <body class="theme-dark">
 
@@ -158,15 +158,20 @@
 
     <!-- ==================== VISTA 2: CÁMARAS Y TRANSMISIÓN CIUDADANA ==================== -->
     <section id="view-envivo" class="view-panel">
-      <!-- Barra superior con botón para transmitir -->
+      <!-- Barra superior con botón para transmitir y reporte rápido de incidente -->
       <div class="live-action-bar">
         <div class="live-action-info">
           <h3><i class="fa-solid fa-satellite-dish"></i> En Vivos de la Ciudadanía</h3>
-          <p>Transmisiones directas de corresponsales y vecinos en Facebook Live y YouTube</p>
+          <p>Transmisiones directas de corresponsales y vecinos en tiempo real</p>
         </div>
-        <button id="btn-start-stream" class="btn-live-action">
-          <i class="fa-solid fa-tower-broadcast"></i> Compartir un En Vivo
-        </button>
+        <div class="live-action-btns-group">
+          <button id="btn-envivo-report-incident" class="btn-live-action btn-live-action-danger" title="Reportar bloqueo o incidente vial sin salir de la cámara">
+            <i class="fa-solid fa-circle-plus"></i> Reportar Incidente
+          </button>
+          <button id="btn-start-stream" class="btn-live-action">
+            <i class="fa-solid fa-tower-broadcast"></i> Compartir un En Vivo
+          </button>
+        </div>
       </div>
 
       <!-- Selector de Transmisiones Activas (Creadas por la gente) -->
@@ -224,6 +229,40 @@
           <div class="reporter-link-help">
             <button id="btn-end-stream-footer" class="btn-text-danger"><i class="fa-solid fa-circle-xmark"></i> Cerrar esta señal en vivo</button>
           </div>
+        </div>
+
+        <!-- Chat Integrado en el En Vivo (Comenta directamente con el reportero y vecinos) -->
+        <div class="stream-live-chat-card" id="stream-live-chat-card">
+          <div class="stream-chat-header">
+            <div class="stream-chat-title">
+              <i class="fa-solid fa-comments"></i>
+              <span>Chat del En Vivo</span>
+              <span class="stream-chat-live-badge"><i class="fa-solid fa-circle live-blink"></i> En Directo</span>
+            </div>
+            <span class="stream-chat-subtitle">Comenta con el reportero y la ciudadanía</span>
+          </div>
+
+          <!-- Contenedor de Mensajes del Chat en Vivo -->
+          <div class="stream-chat-messages" id="stream-chat-messages">
+            <!-- Mensajes en tiempo real sincronizados por WebSocket -->
+          </div>
+
+          <!-- Botones de consulta rápida -->
+          <div class="stream-chat-quick-tags">
+            <button type="button" class="quick-chat-tag" data-msg="📍 ¿Por dónde van en este momento?">📍 ¿Por dónde van?</button>
+            <button type="button" class="quick-chat-tag" data-msg="🚨 ¿Hay pase vehicular o cierre total?">🚨 ¿Hay pase?</button>
+            <button type="button" class="quick-chat-tag" data-msg="👮 ¿Hay contingente policial en el lugar?">👮 ¿Hay policías?</button>
+            <button type="button" class="quick-chat-tag" data-msg="⚠️ Mucha precaución por esa zona vecinos.">⚠️ Cuidado vecinos</button>
+          </div>
+
+          <!-- Formulario de envío de comentarios -->
+          <form id="form-stream-chat" class="stream-chat-form">
+            <input type="text" id="stream-chat-input-user" class="stream-chat-alias" placeholder="Tu nombre..." maxlength="20">
+            <input type="text" id="stream-chat-input-text" class="stream-chat-input" placeholder="Escribe un mensaje o pregunta en vivo..." required maxlength="160" autocomplete="off">
+            <button type="submit" class="btn-stream-chat-send" title="Enviar comentario">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </form>
         </div>
       </div>
     </section>
@@ -540,8 +579,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=13.0"></script>
-  <script src="js/app.js?v=13.0"></script>
+  <script src="js/data.js?v=14.0"></script>
+  <script src="js/app.js?v=14.0"></script>
 </body>
 </html>
 
