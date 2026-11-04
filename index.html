@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=3.0">
+  <link rel="stylesheet" href="css/styles.css?v=5.0">
 </head>
 <body class="theme-dark">
 
@@ -178,6 +178,9 @@
             <a id="btn-open-stream-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-sm btn-accent" title="Abrir en plataforma original">
               <i class="fa-solid fa-up-right-from-square"></i> Ver original
             </a>
+            <button id="btn-end-stream" class="btn-sm btn-danger-action" title="Dar por finalizada esta transmisión">
+              <i class="fa-solid fa-power-off"></i> Finalizar En Vivo
+            </button>
           </div>
         </div>
 
@@ -205,7 +208,7 @@
             <span class="stream-start-time" id="current-stream-time">• Iniciado: --:--</span>
           </div>
           <div class="reporter-link-help">
-            <button id="btn-end-stream" class="btn-text-danger hidden"><i class="fa-solid fa-trash"></i> Eliminar mi enlace</button>
+            <button id="btn-end-stream-footer" class="btn-text-danger"><i class="fa-solid fa-circle-xmark"></i> Cerrar esta señal en vivo</button>
           </div>
         </div>
       </div>
@@ -437,8 +440,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=4.0"></script>
-  <script src="js/app.js?v=4.0"></script>
+  <script src="js/data.js?v=5.0"></script>
+  <script src="js/app.js?v=5.0"></script>
 </body>
 </html>
 

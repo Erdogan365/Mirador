@@ -750,6 +750,36 @@ body {
   color: var(--text-muted);
 }
 
+.pill-close-btn {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pill-close-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.btn-danger-action {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #fca5a5 !important;
+  border: 1px solid #ef4444 !important;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-danger-action:hover {
+  background: #ef4444 !important;
+  color: #fff !important;
+}
+
 /* Modal de Creación de Stream */
 .creator-form {
   display: flex;

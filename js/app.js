@@ -520,11 +520,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btnStart) btnStart.addEventListener("click", openStreamCreatorModal);
     if (btnTrigger) btnTrigger.addEventListener("click", openStreamCreatorModal);
 
-    // Botón finalizar mi transmisión
+    // Botones para finalizar transmisión (en header y footer de la tarjeta)
     const btnEnd = document.getElementById("btn-end-stream");
-    if (btnEnd) {
-      btnEnd.addEventListener("click", endMyStream);
-    }
+    const btnEndFooter = document.getElementById("btn-end-stream-footer");
+    if (btnEnd) btnEnd.addEventListener("click", () => endCurrentStream());
+    if (btnEndFooter) btnEndFooter.addEventListener("click", () => endCurrentStream());
   }
 
   function loadSavedStreams() {
@@ -606,7 +606,10 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.dataset.streamId = stream.id;
 
       btn.innerHTML = `
-        <span class="stream-pill-live"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span class="stream-pill-live"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
+          <span class="pill-close-btn" title="Cerrar esta señal" onclick="event.stopPropagation(); window.closeStreamById('${stream.id}')">&times;</span>
+        </div>
         <span class="stream-pill-title">${escapeHtml(stream.location)}</span>
         <span class="stream-pill-author">por ${escapeHtml(stream.author || "Vecino")}</span>
       `;
@@ -641,31 +644,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const mediaHolder = document.getElementById("stream-media-holder");
     const placeholder = document.getElementById("no-streams-placeholder");
     const btnEnd = document.getElementById("btn-end-stream");
+    const btnEndFooter = document.getElementById("btn-end-stream-footer");
 
     if (placeholder) placeholder.classList.add("hidden");
     if (externalBtn) externalBtn.style.display = "inline-flex";
 
-    // Configurar enlace directo de WhatsApp para compartir este stream
-    if (btnShareWa) {
-      btnShareWa.style.display = "inline-flex";
-      const baseUrl = window.location.origin + window.location.pathname;
-      let shareParam = "";
-      if (stream.room) {
-        shareParam = `?room=${encodeURIComponent(stream.room)}&loc=${encodeURIComponent(stream.location)}`;
-      } else if (stream.url) {
-        shareParam = `?url=${encodeURIComponent(stream.url)}&loc=${encodeURIComponent(stream.location)}`;
-      }
-      const directLiveUrl = baseUrl + shareParam;
-      const waText = encodeURIComponent(`🔴 EN VIVO desde ${stream.location}: Sintoniza la transmisión aquí 👉 ${directLiveUrl}`);
-      btnShareWa.href = `https://wa.me/?text=${waText}`;
-    }
-
-    // Mostrar botón de finalizar si es el creador
-    if (state.myActiveStreamId === stream.id) {
-      btnEnd.classList.remove("hidden");
-    } else {
-      btnEnd.classList.add("hidden");
-    }
+    // Los botones de finalizar siempre están disponibles cuando hay un stream en vivo
+    if (btnEnd) btnEnd.style.display = "inline-flex";
+    if (btnEndFooter) btnEndFooter.style.display = "inline-flex";
 
     mediaHolder.innerHTML = "";
 
@@ -880,17 +866,39 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("stream-creator-modal")?.classList.add("hidden");
   }
 
-  function endMyStream() {
-    if (!state.myActiveStreamId) return;
-    if (confirm("¿Deseas finalizar y dar de baja tu transmisión en vivo?")) {
-      state.streams = state.streams.filter(s => s.id !== state.myActiveStreamId);
-      state.myActiveStreamId = null;
-      localStorage.removeItem("monitor_my_stream_id");
+  function endCurrentStream(streamIdToClose = null) {
+    const targetId = streamIdToClose || state.currentStreamId;
+    const stream = state.streams.find(s => s.id === targetId);
+    if (!stream) return;
+
+    if (confirm(`¿Deseas dar por terminada y retirar la transmisión en vivo de "${stream.location}"?`)) {
+      state.streams = state.streams.filter(s => s.id !== targetId);
+      if (state.myActiveStreamId === targetId) {
+        state.myActiveStreamId = null;
+        localStorage.removeItem("monitor_my_stream_id");
+      }
       saveStreams();
+
+      // Agregar reporte al Minuto a Minuto
+      addLiveFeedItem({
+        time: getCurrentTimeFormatted(),
+        zoneId: "centro",
+        zoneName: stream.location,
+        type: "oficial",
+        tag: "SEÑAL CONCLUIDA",
+        text: `El reportero finalizó la transmisión en directo desde: ${stream.location}.`,
+        source: stream.author || "Reportero"
+      });
+
       state.currentStreamId = state.streams[0]?.id || null;
       renderCitizenStreamsList();
     }
   }
+
+  // Función global para cerrar desde el botón de la píldora
+  window.closeStreamById = function(streamId) {
+    endCurrentStream(streamId);
+  };
 
   function addLiveFeedItem(item) {
     if (!APP_CONFIG.liveFeed) APP_CONFIG.liveFeed = [];
