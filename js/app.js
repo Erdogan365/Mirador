@@ -23,21 +23,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // 1. INICIALIZACIÓN
   // =========================================================================
   function initApp() {
-    updateClock();
-    setInterval(updateClock, 30000);
-
-    initNavigation();
-    initAlertTicker();
-    initCitizenStreams();
-    initWebSocketSync();
-    initMap();
-    initLiveFeed();
-    initChat();
-    initReporterModal();
-    initAudioSystem();
-
-    // Actualizar enlace de reporte de WhatsApp
-    setupWhatsAppButton();
+    try { updateClock(); setInterval(updateClock, 30000); } catch (e) { console.warn("Clock error:", e); }
+    try { initNavigation(); } catch (e) { console.warn("Nav error:", e); }
+    try { initAlertTicker(); } catch (e) { console.warn("Alert ticker error:", e); }
+    try { initCitizenStreams(); } catch (e) { console.warn("Citizen streams error:", e); }
+    try { initWebSocketSync(); } catch (e) { console.warn("WebSocket sync error:", e); }
+    try { initMap(); } catch (e) { console.warn("Map error:", e); }
+    try { initLiveFeed(); } catch (e) { console.warn("Feed error:", e); }
+    try { initChat(); } catch (e) { console.warn("Chat error:", e); }
+    try { initAudioSystem(); } catch (e) { console.warn("Audio error:", e); }
+    try { setupWhatsAppButton(); } catch (e) { console.warn("WA btn error:", e); }
 
     // Si hay una alerta crítica activa y configurada para mostrarse al inicio
     if (APP_CONFIG.urgentAlert?.active && APP_CONFIG.urgentAlert?.showModalOnLoad) {
@@ -499,7 +494,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // =========================================================================
   function initCitizenStreams() {
     loadSavedStreams();
-    renderCitizenStreamsList();
     initStreamCreationModal();
 
     // Controles de pantalla completa
@@ -508,9 +502,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btnFullscreen && streamContainer) {
       btnFullscreen.addEventListener("click", () => {
         if (!document.fullscreenElement) {
-          streamContainer.requestFullscreen?.() || streamContainer.webkitRequestFullscreen?.();
+          if (streamContainer.requestFullscreen) {
+            streamContainer.requestFullscreen();
+          } else if (streamContainer.webkitRequestFullscreen) {
+            streamContainer.webkitRequestFullscreen();
+          }
         } else {
-          document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
         }
       });
     }
@@ -526,6 +528,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnEndFooter = document.getElementById("btn-end-stream-footer");
     if (btnEnd) btnEnd.addEventListener("click", () => endCurrentStream());
     if (btnEndFooter) btnEndFooter.addEventListener("click", () => endCurrentStream());
+
+    renderCitizenStreamsList();
   }
 
   function loadSavedStreams() {
@@ -575,7 +579,8 @@ document.addEventListener("DOMContentLoaded", () => {
     path: "/mqtt",
     topic: "mirador_udh_paro/citizen_streams_v1",
     client: null,
-    connected: false
+    connected: false,
+    pendingPayload: null
   };
 
   function initWebSocketSync() {
@@ -591,8 +596,8 @@ document.addEventListener("DOMContentLoaded", () => {
       MQTT_SYNC.client.onConnectionLost = function(responseObject) {
         MQTT_SYNC.connected = false;
         if (responseObject.errorCode !== 0) {
-          console.warn("WebSocket reconectando en 3s...", responseObject.errorMessage);
-          setTimeout(initWebSocketSync, 3000);
+          console.warn("WebSocket reconectando en 4s...", responseObject.errorMessage);
+          setTimeout(initWebSocketSync, 4000);
         }
       };
 
@@ -600,7 +605,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           const payload = JSON.parse(message.payloadString);
           if (Array.isArray(payload)) {
-            const currentStr = JSON.stringify(state.streams);
+            const currentStr = JSON.stringify(state.streams || []);
             const newStr = JSON.stringify(payload);
             if (currentStr !== newStr) {
               state.streams = payload;
@@ -621,6 +626,18 @@ document.addEventListener("DOMContentLoaded", () => {
           MQTT_SYNC.connected = true;
           console.log("🟢 WebSockets en Vivo Conectado a la Red.");
           MQTT_SYNC.client.subscribe(MQTT_SYNC.topic, { qos: 1 });
+          if (MQTT_SYNC.pendingPayload) {
+            try {
+              const msg = new Paho.MQTT.Message(MQTT_SYNC.pendingPayload);
+              msg.destinationName = MQTT_SYNC.topic;
+              msg.retained = true;
+              msg.qos = 1;
+              MQTT_SYNC.client.send(msg);
+              MQTT_SYNC.pendingPayload = null;
+            } catch (e) {
+              console.warn("Error enviando payload pendiente:", e);
+            }
+          }
         },
         onFailure: function(err) {
           MQTT_SYNC.connected = false;
@@ -634,9 +651,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function broadcastStreamsViaWebSocket() {
+    const payload = JSON.stringify(state.streams || []);
     if (MQTT_SYNC.client && MQTT_SYNC.connected) {
       try {
-        const payload = JSON.stringify(state.streams);
         const msg = new Paho.MQTT.Message(payload);
         msg.destinationName = MQTT_SYNC.topic;
         msg.retained = true; // Retenido en broker: garantiza que quien abra la web reciba los en vivos activos
@@ -645,12 +662,14 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (err) {
         console.warn("Error enviando por WebSocket:", err);
       }
+    } else {
+      MQTT_SYNC.pendingPayload = payload;
     }
   }
 
   function saveStreams() {
     try {
-      localStorage.setItem("monitor_citizen_streams", JSON.stringify(state.streams));
+      localStorage.setItem("monitor_citizen_streams", JSON.stringify(state.streams || []));
     } catch (e) { }
     broadcastStreamsViaWebSocket();
   }
@@ -660,52 +679,69 @@ document.addEventListener("DOMContentLoaded", () => {
     const streamsBar = document.getElementById("active-streams-bar");
     const placeholder = document.getElementById("no-streams-placeholder");
     const mediaHolder = document.getElementById("stream-media-holder");
-    const streamCard = document.getElementById("stream-card-wrapper");
+    const btnShareWa = document.getElementById("btn-share-stream-wa");
+    const btnFullscreen = document.getElementById("btn-fullscreen-stream");
+    const btnEnd = document.getElementById("btn-end-stream");
+    const btnEndFooter = document.getElementById("btn-end-stream-footer");
 
-    if (!listContainer) return;
-    listContainer.innerHTML = "";
+    if (listContainer) listContainer.innerHTML = "";
 
     // Si NO hay transmisiones activas
     if (!state.streams || state.streams.length === 0) {
       if (streamsBar) streamsBar.style.display = "none";
       if (placeholder) placeholder.classList.remove("hidden");
       if (mediaHolder) mediaHolder.innerHTML = "";
-      document.getElementById("current-stream-title").textContent = "SIN SEÑAL EN VIVO";
-      document.getElementById("current-stream-location").textContent = "Esperando señal ciudadana";
-      document.getElementById("current-stream-author").textContent = "--";
-      document.getElementById("current-stream-time").textContent = "";
-      document.getElementById("btn-open-stream-external").style.display = "none";
-      document.getElementById("btn-end-stream").classList.add("hidden");
+      
+      const titleEl = document.getElementById("current-stream-title");
+      if (titleEl) titleEl.textContent = "SIN SEÑAL EN VIVO";
+      const locEl = document.getElementById("current-stream-location");
+      if (locEl) locEl.textContent = "Esperando señal ciudadana";
+      const authorEl = document.getElementById("current-stream-author");
+      if (authorEl) authorEl.textContent = "--";
+      const timeEl = document.getElementById("current-stream-time");
+      if (timeEl) timeEl.textContent = "";
+
+      // Ocultar botones de reproducción/acciones cuando no hay en vivo
+      if (btnShareWa) btnShareWa.style.display = "none";
+      if (btnFullscreen) btnFullscreen.style.display = "none";
+      if (btnEnd) btnEnd.style.display = "none";
+      if (btnEndFooter) btnEndFooter.style.display = "none";
       return;
     }
 
     // Si hay transmisiones creadas por la gente
     if (streamsBar) streamsBar.style.display = "block";
     if (placeholder) placeholder.classList.add("hidden");
+    if (btnShareWa) btnShareWa.style.display = "inline-flex";
+    if (btnFullscreen) btnFullscreen.style.display = "inline-flex";
+    if (btnEnd) btnEnd.style.display = "inline-flex";
+    if (btnEndFooter) btnEndFooter.style.display = "inline-flex";
 
-    state.streams.forEach((stream, index) => {
-      const btn = document.createElement("button");
-      const isActive = state.currentStreamId === stream.id || (!state.currentStreamId && index === 0);
-      btn.className = `btn-stream-pill ${isActive ? "active" : ""}`;
-      btn.dataset.streamId = stream.id;
+    if (listContainer) {
+      state.streams.forEach((stream, index) => {
+        const btn = document.createElement("button");
+        const isActive = state.currentStreamId === stream.id || (!state.currentStreamId && index === 0);
+        btn.className = `btn-stream-pill ${isActive ? "active" : ""}`;
+        btn.dataset.streamId = stream.id;
 
-      btn.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span class="stream-pill-live"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
-          <span class="pill-close-btn" title="Cerrar esta señal" onclick="event.stopPropagation(); window.closeStreamById('${stream.id}')">&times;</span>
-        </div>
-        <span class="stream-pill-title">${escapeHtml(stream.location)}</span>
-        <span class="stream-pill-author">por ${escapeHtml(stream.author || "Vecino")}</span>
-      `;
+        btn.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="stream-pill-live"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
+            <span class="pill-close-btn" title="Cerrar esta señal" onclick="event.stopPropagation(); window.closeStreamById('${stream.id}')">&times;</span>
+          </div>
+          <span class="stream-pill-title">${escapeHtml(stream.location)}</span>
+          <span class="stream-pill-author">por ${escapeHtml(stream.author || "Vecino")}</span>
+        `;
 
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".btn-stream-pill").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        playCitizenStream(stream.id);
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".btn-stream-pill").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          playCitizenStream(stream.id);
+        });
+
+        listContainer.appendChild(btn);
       });
-
-      listContainer.appendChild(btn);
-    });
+    }
 
     // Reproducir la primera si no hay una seleccionada
     const targetId = state.currentStreamId || state.streams[0].id;
@@ -713,35 +749,41 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function playCitizenStream(streamId) {
+    if (!state.streams) return;
     const stream = state.streams.find(s => s.id === streamId);
     if (!stream) return;
 
     state.currentStreamId = streamId;
 
     const isMyStream = state.myActiveStreamId === stream.id;
+    const titleEl = document.getElementById("current-stream-title");
+    const locEl = document.getElementById("current-stream-location");
+    const authorEl = document.getElementById("current-stream-author");
+    const timeEl = document.getElementById("current-stream-time");
 
     if (isMyStream && (stream.type === "vdo" || stream.room)) {
-      document.getElementById("current-stream-title").textContent = "TU CÁMARA EN VIVO";
-      document.getElementById("current-stream-location").textContent = `🔴 Transmitiendo desde: ${stream.location}`;
+      if (titleEl) titleEl.textContent = "TU CÁMARA EN VIVO";
+      if (locEl) locEl.textContent = `🔴 Transmitiendo desde: ${stream.location}`;
     } else {
-      document.getElementById("current-stream-title").textContent = stream.location.toUpperCase();
-      document.getElementById("current-stream-location").textContent = `📍 ${stream.location}`;
+      if (titleEl) titleEl.textContent = stream.location.toUpperCase();
+      if (locEl) locEl.textContent = `📍 ${stream.location}`;
     }
 
-    document.getElementById("current-stream-author").textContent = stream.author || "Ciudadano en el punto";
-    document.getElementById("current-stream-time").textContent = `• Iniciado: ${stream.time}`;
+    if (authorEl) authorEl.textContent = stream.author || "Ciudadano en el punto";
+    if (timeEl) timeEl.textContent = `• Iniciado: ${stream.time}`;
 
     const btnShareWa = document.getElementById("btn-share-stream-wa");
     const mediaHolder = document.getElementById("stream-media-holder");
     const placeholder = document.getElementById("no-streams-placeholder");
     const btnEnd = document.getElementById("btn-end-stream");
     const btnEndFooter = document.getElementById("btn-end-stream-footer");
+    const btnFullscreen = document.getElementById("btn-fullscreen-stream");
 
     if (placeholder) placeholder.classList.add("hidden");
 
-    // Los botones de finalizar siempre están disponibles cuando hay un stream en vivo
     if (btnEnd) btnEnd.style.display = "inline-flex";
     if (btnEndFooter) btnEndFooter.style.display = "inline-flex";
+    if (btnFullscreen) btnFullscreen.style.display = "inline-flex";
 
     // Configurar enlace directo de WhatsApp para compartir este stream
     if (btnShareWa) {
@@ -758,6 +800,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btnShareWa.href = `https://wa.me/?text=${waText}`;
     }
 
+    if (!mediaHolder) return;
     mediaHolder.innerHTML = "";
 
     // Renderizar Transmisión 100% IN-APP (Sin salir de la web)
@@ -862,19 +905,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (btnClose) btnClose.addEventListener("click", closeStreamCreatorModal);
     if (btnCancel) btnCancel.addEventListener("click", closeStreamCreatorModal);
-    modal?.addEventListener("click", (e) => { if (e.target === modal) closeStreamCreatorModal(); });
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeStreamCreatorModal();
+      });
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeStreamCreatorModal();
+    });
 
     // Alternar modo de transmisión
     radioInputs.forEach(radio => {
       radio.addEventListener("change", () => {
         document.querySelectorAll(".radio-card").forEach(c => c.classList.remove("active"));
-        radio.closest(".radio-card").classList.add("active");
+        radio.closest(".radio-card")?.classList.add("active");
         if (radio.value === "social") {
-          groupUrl.classList.remove("hidden");
-          inputUrl.required = true;
+          groupUrl?.classList.remove("hidden");
+          if (inputUrl) inputUrl.required = true;
         } else {
-          groupUrl.classList.add("hidden");
-          inputUrl.required = false;
+          groupUrl?.classList.add("hidden");
+          if (inputUrl) inputUrl.required = false;
         }
       });
     });
@@ -882,10 +933,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (form) {
       form.addEventListener("submit", (e) => {
         e.preventDefault();
-        const location = inputLocation.value.trim();
-        const author = inputAuthor.value.trim() || "Vecino / Reportero";
-        const mode = document.querySelector('input[name="stream_mode"]:checked').value;
-        const url = inputUrl.value.trim();
+        const location = inputLocation ? inputLocation.value.trim() : "";
+        const author = (inputAuthor && inputAuthor.value.trim()) || "Vecino / Reportero";
+        const selectedRadio = document.querySelector('input[name="stream_mode"]:checked');
+        const mode = selectedRadio ? selectedRadio.value : "vdo";
+        const url = inputUrl ? inputUrl.value.trim() : "";
 
         if (!location) return;
 
@@ -911,9 +963,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Guardar como mi transmisión activa local
+        if (!Array.isArray(state.streams)) state.streams = [];
         state.streams.unshift(newStream);
         state.myActiveStreamId = streamId;
-        localStorage.setItem("monitor_my_stream_id", streamId);
+        try {
+          localStorage.setItem("monitor_my_stream_id", streamId);
+        } catch (err) {}
         saveStreams();
 
         // Agregar reporte automático al Minuto a Minuto
@@ -941,11 +996,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function openStreamCreatorModal() {
-    document.getElementById("stream-creator-modal")?.classList.remove("hidden");
+    const modal = document.getElementById("stream-creator-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      setTimeout(() => {
+        document.getElementById("stream-input-location")?.focus();
+      }, 100);
+    }
   }
 
   function closeStreamCreatorModal() {
-    document.getElementById("stream-creator-modal")?.classList.add("hidden");
+    const modal = document.getElementById("stream-creator-modal");
+    if (modal) {
+      modal.classList.add("hidden");
+    }
   }
 
   function endCurrentStream(streamIdToClose = null) {
@@ -1139,8 +1203,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // 8. GUÍA Y ENLACES PARA REPORTEROS
   // =========================================================================
   function initReporterModal() {
-    const linkGuide = document.getElementById("link-reporter-guide");
     const modal = document.getElementById("reporter-modal");
+    if (!modal) return;
+    const linkGuide = document.getElementById("link-reporter-guide");
     const btnClose = document.getElementById("btn-close-reporter-modal");
     const btnOk = document.getElementById("btn-reporter-modal-ok");
     const linksContainer = document.getElementById("reporter-zones-links");

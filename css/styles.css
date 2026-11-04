@@ -53,6 +53,11 @@ body {
   min-height: 100vh;
 }
 
+/* Utilidad global para ocultar elementos */
+.hidden {
+  display: none !important;
+}
+
 /* ==================== TICKER DE ALERTA CRÍTICA ==================== */
 .urgent-ticker {
   background: linear-gradient(90deg, #991b1b, #dc2626, #b91c1c);
