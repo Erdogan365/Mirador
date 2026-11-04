@@ -4,6 +4,55 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  function getOrCreateClientId() {
+    try {
+      let id = localStorage.getItem("monitor_citizen_client_id");
+      if (!id) {
+        id = "usr_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 8);
+        localStorage.setItem("monitor_citizen_client_id", id);
+      }
+      return id;
+    } catch (e) {
+      return "usr_" + Math.random().toString(36).substring(2, 8);
+    }
+  }
+
+  function getMyCreatedStreamIds() {
+    try {
+      const ids = JSON.parse(localStorage.getItem("monitor_my_stream_ids") || "[]");
+      return Array.isArray(ids) ? ids : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function addMyCreatedStreamId(streamId) {
+    if (!streamId) return;
+    try {
+      const ids = getMyCreatedStreamIds();
+      if (!ids.includes(streamId)) {
+        ids.push(streamId);
+        localStorage.setItem("monitor_my_stream_ids", JSON.stringify(ids));
+      }
+    } catch (e) {}
+  }
+
+  function removeMyCreatedStreamId(streamId) {
+    if (!streamId) return;
+    try {
+      const ids = getMyCreatedStreamIds().filter(id => id !== streamId);
+      localStorage.setItem("monitor_my_stream_ids", JSON.stringify(ids));
+    } catch (e) {}
+  }
+
+  function isStreamOwnedByMe(stream) {
+    if (!stream) return false;
+    if (state.myActiveStreamId && state.myActiveStreamId === stream.id) return true;
+    if (stream.ownerId && stream.ownerId === state.myClientId) return true;
+    if (getMyCreatedStreamIds().includes(stream.id)) return true;
+    return false;
+  }
+
   // Estado global de la aplicación
   const state = {
     currentView: "mapa",
@@ -20,7 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentStreamId: null,
     currentPlayingStreamId: null,
     chatMessages: [],
-    myClientId: "usr_" + Math.random().toString(36).substring(2, 8),
+    myClientId: getOrCreateClientId(),
     tempPickerMarker: null,
     isPickingLocationOnMap: false
   };
@@ -846,8 +895,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (placeholder) placeholder.classList.add("hidden");
     if (btnShareWa) btnShareWa.style.display = "inline-flex";
     if (btnFullscreen) btnFullscreen.style.display = "inline-flex";
-    if (btnEnd) btnEnd.style.display = "inline-flex";
-    if (btnEndFooter) btnEndFooter.style.display = "inline-flex";
 
     if (listContainer) {
       state.streams.forEach((stream, index) => {
@@ -856,13 +903,18 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.className = `btn-stream-pill ${isActive ? "active" : ""}`;
         btn.dataset.streamId = stream.id;
 
+        const isMine = isStreamOwnedByMe(stream);
+        const closeBtnHtml = isMine
+          ? `<span class="pill-close-btn" title="Finalizar mi transmisión" onclick="event.stopPropagation(); window.closeStreamById('${stream.id}')">&times;</span>`
+          : '';
+
         btn.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <span class="stream-pill-live"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
-            <span class="pill-close-btn" title="Cerrar esta señal" onclick="event.stopPropagation(); window.closeStreamById('${stream.id}')">&times;</span>
+            ${closeBtnHtml}
           </div>
           <span class="stream-pill-title">${escapeHtml(stream.location)}</span>
-          <span class="stream-pill-author">por ${escapeHtml(stream.author || "Vecino")}</span>
+          <span class="stream-pill-author">por ${escapeHtml(stream.author || "Vecino")}${isMine ? " (Tú)" : ""}</span>
         `;
 
         btn.addEventListener("click", () => {
@@ -889,7 +941,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     state.currentStreamId = streamId;
 
-    const isMyStream = state.myActiveStreamId === stream.id;
+    const isMyStream = isStreamOwnedByMe(stream);
     const titleEl = document.getElementById("current-stream-title");
     const locEl = document.getElementById("current-stream-location");
     const authorEl = document.getElementById("current-stream-author");
@@ -915,8 +967,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (placeholder) placeholder.classList.add("hidden");
 
-    if (btnEnd) btnEnd.style.display = "inline-flex";
-    if (btnEndFooter) btnEndFooter.style.display = "inline-flex";
+    // Los botones de finalizar SOLO se muestran si la transmisión pertenece a este usuario
+    if (btnEnd) btnEnd.style.display = isMyStream ? "inline-flex" : "none";
+    if (btnEndFooter) btnEndFooter.style.display = isMyStream ? "inline-flex" : "none";
     if (btnFullscreen) btnFullscreen.style.display = "inline-flex";
 
     // Configurar enlace directo de WhatsApp para compartir este stream
@@ -1101,6 +1154,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let newStream = {
           id: streamId,
+          ownerId: state.myClientId,
           location: location,
           author: author,
           time: timeNow,
@@ -1122,6 +1176,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!Array.isArray(state.streams)) state.streams = [];
         state.streams.unshift(newStream);
         state.myActiveStreamId = streamId;
+        addMyCreatedStreamId(streamId);
         try {
           localStorage.setItem("monitor_my_stream_id", streamId);
         } catch (err) {}
@@ -1173,12 +1228,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const stream = state.streams.find(s => s.id === targetId);
     if (!stream) return;
 
-    if (confirm(`¿Deseas dar por terminada y retirar la transmisión en vivo de "${stream.location}"?`)) {
+    // Validación estricta de propiedad: Solo el creador original puede dar por finalizada la transmisión
+    if (!isStreamOwnedByMe(stream)) {
+      alert("⚠️ Acción denegada: Solo el reportero que inició esta transmisión en vivo tiene permiso para darla por concluida.");
+      return;
+    }
+
+    if (confirm(`¿Deseas dar por terminada y retirar tu transmisión en vivo de "${stream.location}"?`)) {
       state.streams = state.streams.filter(s => s.id !== targetId);
       if (state.myActiveStreamId === targetId) {
         state.myActiveStreamId = null;
         localStorage.removeItem("monitor_my_stream_id");
       }
+      removeMyCreatedStreamId(targetId);
       saveStreams();
 
       // Agregar reporte al Minuto a Minuto
@@ -1188,10 +1250,13 @@ document.addEventListener("DOMContentLoaded", () => {
         zoneName: stream.location,
         type: "oficial",
         tag: "SEÑAL CONCLUIDA",
-        text: `El reportero finalizó la transmisión en directo desde: ${stream.location}.`,
+        text: `El reportero finalizó su transmisión en directo desde: ${stream.location}.`,
         source: stream.author || "Reportero"
       });
 
+      if (state.currentPlayingStreamId === targetId) {
+        state.currentPlayingStreamId = null;
+      }
       state.currentStreamId = state.streams[0]?.id || null;
       renderCitizenStreamsList();
     }
