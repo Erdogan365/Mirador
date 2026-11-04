@@ -536,6 +536,30 @@ document.addEventListener("DOMContentLoaded", () => {
         state.streams = Array.isArray(APP_CONFIG.citizenStreams) ? [...APP_CONFIG.citizenStreams] : [];
       }
       state.myActiveStreamId = localStorage.getItem("monitor_my_stream_id") || null;
+
+      // Detectar si el usuario abrió un enlace compartido con transmisión (URL Params)
+      const urlParams = new URLSearchParams(window.location.search);
+      const sharedRoom = urlParams.get("room");
+      const sharedLoc = urlParams.get("loc");
+      const sharedUrl = urlParams.get("url");
+
+      if (sharedRoom || sharedUrl) {
+        const sharedId = "shared-" + (sharedRoom || "social");
+        const exists = state.streams.some(s => s.id === sharedId || (sharedRoom && s.room === sharedRoom));
+        if (!exists) {
+          const newShared = {
+            id: sharedId,
+            location: sharedLoc || "Punto de Movilización",
+            author: "Reportero en el lugar",
+            time: "En directo",
+            type: sharedUrl ? "social" : "camera",
+            room: sharedRoom || null,
+            url: sharedUrl || null
+          };
+          state.streams.unshift(newShared);
+          state.currentStreamId = sharedId;
+        }
+      }
     } catch (e) {
       state.streams = [];
     }
@@ -613,12 +637,28 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("current-stream-time").textContent = `• Iniciado: ${stream.time}`;
 
     const externalBtn = document.getElementById("btn-open-stream-external");
+    const btnShareWa = document.getElementById("btn-share-stream-wa");
     const mediaHolder = document.getElementById("stream-media-holder");
     const placeholder = document.getElementById("no-streams-placeholder");
     const btnEnd = document.getElementById("btn-end-stream");
 
     if (placeholder) placeholder.classList.add("hidden");
     if (externalBtn) externalBtn.style.display = "inline-flex";
+
+    // Configurar enlace directo de WhatsApp para compartir este stream
+    if (btnShareWa) {
+      btnShareWa.style.display = "inline-flex";
+      const baseUrl = window.location.origin + window.location.pathname;
+      let shareParam = "";
+      if (stream.room) {
+        shareParam = `?room=${encodeURIComponent(stream.room)}&loc=${encodeURIComponent(stream.location)}`;
+      } else if (stream.url) {
+        shareParam = `?url=${encodeURIComponent(stream.url)}&loc=${encodeURIComponent(stream.location)}`;
+      }
+      const directLiveUrl = baseUrl + shareParam;
+      const waText = encodeURIComponent(`🔴 EN VIVO desde ${stream.location}: Sintoniza la transmisión aquí 👉 ${directLiveUrl}`);
+      btnShareWa.href = `https://wa.me/?text=${waText}`;
+    }
 
     // Mostrar botón de finalizar si es el creador
     if (state.myActiveStreamId === stream.id) {

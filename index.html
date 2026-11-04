@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=3.0">
 </head>
 <body class="theme-dark">
 
@@ -144,7 +144,7 @@
       <!-- Barra superior con botón para transmitir -->
       <div class="live-action-bar">
         <div class="live-action-info">
-          <h3><i class="fa-solid fa-tower-broadcast"></i> Señales en Vivo de la Ciudadanía</h3>
+          <h3><i class="fa-solid fa-satellite-dish"></i> Señales en Vivo de la Ciudadanía</h3>
           <p>Transmisiones directas de corresponsales y vecinos en el lugar de los hechos</p>
         </div>
         <button id="btn-start-stream" class="btn-live-action">
@@ -169,6 +169,9 @@
             <span class="stream-meta-status tag-bloqueo" id="current-stream-location">📍 Lugar</span>
           </div>
           <div class="stream-actions">
+            <a id="btn-share-stream-wa" href="#" target="_blank" rel="noopener noreferrer" class="btn-sm btn-whatsapp-stream" title="Compartir este en vivo por WhatsApp">
+              <i class="fa-brands fa-whatsapp"></i> Compartir
+            </a>
             <button id="btn-fullscreen-stream" class="btn-sm" title="Pantalla completa">
               <i class="fa-solid fa-expand"></i>
             </button>
@@ -409,9 +412,9 @@
   <!-- Jitsi Meet External API -->
   <script src="https://meet.jit.si/external_api.js"></script>
 
-  <!-- Scripts de la Aplicación -->
-  <script src="js/data.js"></script>
-  <script src="js/app.js"></script>
+  <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
+  <script src="js/data.js?v=3.0"></script>
+  <script src="js/app.js?v=3.0"></script>
 </body>
 </html>
 

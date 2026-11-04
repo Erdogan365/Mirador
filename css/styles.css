@@ -936,6 +936,17 @@ body {
   background: #0369a1;
 }
 
+.btn-whatsapp-stream {
+  background: #25d366 !important;
+  color: #022c22 !important;
+  border-color: #10b981 !important;
+  font-weight: 700;
+}
+
+.btn-whatsapp-stream:hover {
+  background: #22c55e !important;
+}
+
 /* Contenedor del video */
 .stream-container {
   position: relative;
