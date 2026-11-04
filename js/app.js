@@ -883,10 +883,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const form = document.getElementById("form-stream-chat");
     const inputUser = document.getElementById("stream-chat-input-user");
     const inputText = document.getElementById("stream-chat-input-text");
-    const quickTags = document.querySelectorAll(".quick-chat-tag");
+    const quickTags = document.querySelectorAll("#tiktok-quick-tags .quick-chat-tag, .quick-chat-tag");
+    const btnToggleChat = document.getElementById("btn-toggle-tiktok-chat");
+    const overlay = document.getElementById("tiktok-live-overlay");
 
     const savedAlias = localStorage.getItem("monitor_chat_alias");
     if (savedAlias && inputUser) inputUser.value = savedAlias;
+
+    if (btnToggleChat && overlay) {
+      btnToggleChat.addEventListener("click", () => {
+        overlay.classList.toggle("chat-hidden");
+        const isHidden = overlay.classList.contains("chat-hidden");
+        btnToggleChat.classList.toggle("chat-off", isHidden);
+        btnToggleChat.innerHTML = isHidden 
+          ? '<i class="fa-solid fa-comment-slash"></i>' 
+          : '<i class="fa-solid fa-comment-dots"></i>';
+        btnToggleChat.title = isHidden ? "Mostrar comentarios" : "Ocultar comentarios";
+      });
+    }
 
     quickTags.forEach(btn => {
       btn.addEventListener("click", () => {
@@ -943,9 +957,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!Array.isArray(state.streamChatMessages) || state.streamChatMessages.length === 0) {
       container.innerHTML = `
-        <div style="text-align:center; padding:18px 8px; color:#64748b; font-size:0.75rem;">
-          <i class="fa-regular fa-comment-dots" style="font-size:1.1rem; margin-bottom:4px; display:block;"></i>
-          Sé el primero en comentar o preguntar al reportero en directo.
+        <div class="tiktok-comment-bubble" style="opacity: 0.85;">
+          <span class="tiktok-author-tag" style="color:#38bdf8;">Monitor:</span>
+          <span class="tiktok-comment-text">¡Señal en vivo! Comenta aquí con el reportero.</span>
         </div>
       `;
       return;
@@ -954,16 +968,13 @@ document.addEventListener("DOMContentLoaded", () => {
     container.innerHTML = "";
     state.streamChatMessages.forEach(msg => {
       const isMine = msg.senderId && msg.senderId === state.myClientId;
-      const row = document.createElement("div");
-      row.className = `stream-chat-msg-row ${isMine ? "mine" : ""}`;
-      row.innerHTML = `
-        <div class="stream-chat-msg-header">
-          <span class="stream-chat-author">${escapeHtml(msg.user || "Vecino")}</span>
-          <span class="stream-chat-time">${msg.time}</span>
-        </div>
-        <div class="stream-chat-body">${escapeHtml(msg.text)}</div>
+      const bubble = document.createElement("div");
+      bubble.className = `tiktok-comment-bubble ${isMine ? "mine" : ""}`;
+      bubble.innerHTML = `
+        <span class="tiktok-author-tag">${escapeHtml(msg.user || "Vecino")}:</span>
+        <span class="tiktok-comment-text">${escapeHtml(msg.text)}</span>
       `;
-      container.appendChild(row);
+      container.appendChild(bubble);
     });
 
     container.scrollTop = container.scrollHeight;
