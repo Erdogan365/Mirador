@@ -669,43 +669,66 @@ document.addEventListener("DOMContentLoaded", () => {
 
     mediaHolder.innerHTML = "";
 
-    // Tipo de Transmisión
-    if (stream.type === "social") {
-      externalBtn.href = stream.url;
-      if (stream.url.includes("youtu")) {
-        externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
-        embedYouTubeLive(mediaHolder, stream.url);
-      } else if (stream.url.includes("facebook")) {
-        externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
-        embedFacebookLive(mediaHolder, stream.url);
-      } else {
-        externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Abrir Enlace`;
-        mediaHolder.innerHTML = `<div class="stream-generic-box">
-          <h4>Transmisión Externa</h4>
-          <p>Esta transmisión se está emitiendo en vivo a través de redes sociales.</p>
-          <a href="${stream.url}" target="_blank" rel="noopener noreferrer" class="btn-primary">
-            <i class="fa-solid fa-up-right-from-square"></i> Ver Directo en Plataforma
-          </a>
-        </div>`;
-      }
+    // Renderizar Transmisión
+    externalBtn.href = stream.url;
+    if (stream.url.includes("youtu")) {
+      externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
+      embedYouTubeLive(mediaHolder, stream.url);
+    } else if (stream.url.includes("facebook") || stream.url.includes("fb.watch")) {
+      externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
+      embedFacebookLive(mediaHolder, stream.url);
     } else {
-      // Jitsi Meet (Cámara directa del reportero)
-      const jitsiUrl = `https://meet.jit.si/${stream.room}`;
-      externalBtn.href = jitsiUrl;
-      externalBtn.innerHTML = `<i class="fa-solid fa-video"></i> Abrir en App Jitsi`;
-      embedJitsiViewer(mediaHolder, stream.room);
+      externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Abrir Enlace`;
+      embedGenericLive(mediaHolder, stream.url);
     }
   }
 
-  function embedJitsiViewer(container, roomName) {
+  function embedYouTubeLive(container, url) {
     container.innerHTML = "";
+    let videoId = "";
+    // Soporta youtube.com/watch?v=, youtu.be/, youtube.com/live/
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length >= 11) {
+      videoId = match[2].substring(0, 11);
+    }
+    const embedSrc = videoId 
+      ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&rel=0` 
+      : url;
+
     const iframe = document.createElement("iframe");
-    iframe.src = `https://meet.jit.si/${roomName}#config.prejoinConfig.enabled=false&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true&userInfo.displayName=%22Espectador%22`;
-    iframe.allow = "camera; microphone; fullscreen; display-capture; autoplay";
+    iframe.src = embedSrc;
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+    iframe.allowFullscreen = true;
     iframe.style.width = "100%";
     iframe.style.height = "100%";
     iframe.style.border = "none";
     container.appendChild(iframe);
+  }
+
+  function embedFacebookLive(container, url) {
+    container.innerHTML = "";
+    const encodedUrl = encodeURIComponent(url);
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://www.facebook.com/plugins/video.php?href=${encodedUrl}&show_text=false&autoplay=true`;
+    iframe.allow = "autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "none";
+    container.appendChild(iframe);
+  }
+
+  function embedGenericLive(container, url) {
+    container.innerHTML = `
+      <div class="stream-generic-box">
+        <h4><i class="fa-solid fa-tower-broadcast"></i> Transmisión en Directo</h4>
+        <p>Esta transmisión se está emitiendo en vivo a través de una plataforma externa.</p>
+        <a href="${url}" target="_blank" rel="noopener noreferrer" class="btn-primary">
+          <i class="fa-solid fa-up-right-from-square"></i> Sintonizar En Vivo Ahora
+        </a>
+      </div>
+    `;
   }
 
   function initStreamCreationModal() {
@@ -713,23 +736,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnClose = document.getElementById("btn-close-creator-modal");
     const btnCancel = document.getElementById("btn-cancel-create-stream");
     const form = document.getElementById("form-create-stream");
-    const radioInputs = document.querySelectorAll('input[name="stream_mode"]');
-    const groupUrl = document.getElementById("group-stream-url");
+    const inputLocation = document.getElementById("stream-input-location");
     const inputUrl = document.getElementById("stream-input-url");
-
-    radioInputs.forEach(radio => {
-      radio.addEventListener("change", () => {
-        document.querySelectorAll(".radio-card").forEach(c => c.classList.remove("active"));
-        radio.closest(".radio-card").classList.add("active");
-        if (radio.value === "social") {
-          groupUrl.classList.remove("hidden");
-          inputUrl.required = true;
-        } else {
-          groupUrl.classList.add("hidden");
-          inputUrl.required = false;
-        }
-      });
-    });
+    const inputAuthor = document.getElementById("stream-input-author");
 
     if (btnClose) btnClose.addEventListener("click", closeStreamCreatorModal);
     if (btnCancel) btnCancel.addEventListener("click", closeStreamCreatorModal);
@@ -738,48 +747,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (form) {
       form.addEventListener("submit", (e) => {
         e.preventDefault();
-        const location = document.getElementById("stream-input-location").value.trim();
-        const author = document.getElementById("stream-input-author").value.trim() || "Vecino en el punto";
-        const mode = document.querySelector('input[name="stream_mode"]:checked').value;
+        const location = inputLocation.value.trim();
         const url = inputUrl.value.trim();
+        const author = inputAuthor.value.trim() || "Vecino / Reportero";
 
-        if (!location) return;
+        if (!location || !url) return;
 
         const streamId = "stream-" + Date.now();
         const timeNow = getCurrentTimeFormatted();
 
-        let newStream = {
+        const newStream = {
           id: streamId,
           location: location,
           author: author,
           time: timeNow,
-          type: mode
+          url: url
         };
 
-        if (mode === "camera") {
-          // Generar sala de Jitsi única
-          const randomId = Math.random().toString(36).substring(2, 8);
-          const cleanLoc = location.replace(/[^a-zA-Z0-9]/g, "");
-          const room = `ParoHuanuco_${cleanLoc}_${randomId}`;
-          newStream.room = room;
-
-          // Guardar y notificar
-          state.streams.unshift(newStream);
-          state.myActiveStreamId = streamId;
-          localStorage.setItem("monitor_my_stream_id", streamId);
-          saveStreams();
-
-          // Abrir la cámara del reportero en una pestaña para que comience a emitir
-          const broadcasterUrl = `https://meet.jit.si/${room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false&userInfo.displayName="${encodeURIComponent(author)}"`;
-          window.open(broadcasterUrl, "_blank");
-        } else {
-          // Modo enlace de redes sociales
-          newStream.url = url;
-          state.streams.unshift(newStream);
-          state.myActiveStreamId = streamId;
-          localStorage.setItem("monitor_my_stream_id", streamId);
-          saveStreams();
-        }
+        state.streams.unshift(newStream);
+        state.myActiveStreamId = streamId;
+        localStorage.setItem("monitor_my_stream_id", streamId);
+        saveStreams();
 
         // Agregar reporte automático al Minuto a Minuto
         addLiveFeedItem({
@@ -787,9 +775,9 @@ document.addEventListener("DOMContentLoaded", () => {
           zoneId: "centro",
           zoneName: location,
           type: "urgente",
-          tag: "EN VIVO AHORA",
-          text: `Se inició una nueva transmisión en directo desde: ${location} por ${author}.`,
-          source: "Reporte Ciudadano"
+          tag: "EN VIVO",
+          text: `Se compartió una transmisión en vivo desde: ${location} por ${author}.`,
+          source: author
         });
 
         closeStreamCreatorModal();
