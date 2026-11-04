@@ -31,6 +31,8 @@ const APP_CONFIG = {
   },
 
   // Zonas / Frentes Informativos Estratégicos
+  // NOTA: Cambia activeStream a true SOLO cuando el reportero esté transmitiendo de verdad.
+  // Soporta: 'jitsi', 'youtube', 'facebook', 'iframe'
   zones: [
     {
       id: "norte",
@@ -39,11 +41,11 @@ const APP_CONFIG = {
       status: "Bloqueo Parcial",
       statusType: "restringido", // 'bloqueo', 'restringido', 'libre'
       reporter: "Móvil 01 - Fonavi",
-      // Sala pública y gratuita en Jitsi Meet
+      activeStream: false, // <-- Cambiar a true cuando esté transmitiendo de verdad
+      streamType: "jitsi", // 'jitsi', 'youtube', 'facebook'
+      streamUrl: "https://meet.jit.si/ParoHuanuco_ZonaNorte_Oficial",
       jitsiRoom: "ParoHuanuco_ZonaNorte_Oficial",
-      // Sala de chat comunitaria en Minnit (con historial en vivo)
       minnitRoom: "ParoHuanucoNorte",
-      activeStream: true,
       description: "Vía de salida a Tingo María con tránsito de mototaxis lento por bloqueo intermitente."
     },
     {
@@ -53,9 +55,11 @@ const APP_CONFIG = {
       status: "Marcha en Avance",
       statusType: "bloqueo",
       reporter: "Móvil 02 - Prensa Popular",
+      activeStream: true, // <-- Esta zona está activa con transmisión
+      streamType: "jitsi", // Si tienes link de YouTube pega el link aquí y pon streamType: 'youtube'
+      streamUrl: "https://meet.jit.si/ParoHuanuco_ZonaCentro_Oficial",
       jitsiRoom: "ParoHuanuco_ZonaCentro_Oficial",
       minnitRoom: "ParoHuanucoCentro",
-      activeStream: true,
       description: "Comerciantes cerraron puestos en Mercado Central. Columna de manifestantes rumbo a la Plaza."
     },
     {
@@ -65,9 +69,11 @@ const APP_CONFIG = {
       status: "Bloqueo Total",
       statusType: "bloqueo",
       reporter: "Móvil 03 - Pillco Marca",
+      activeStream: false, // <-- Fuera del aire hasta que el reportero conecte
+      streamType: "jitsi",
+      streamUrl: "https://meet.jit.si/ParoHuanuco_ZonaSur_Oficial",
       jitsiRoom: "ParoHuanuco_ZonaSur_Oficial",
       minnitRoom: "ParoHuanucoSur",
-      activeStream: true,
       description: "Puente San Sebastián y Óvalo de Cayhuayna completamente cerrados por piquetes de huelga."
     }
   ],

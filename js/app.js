@@ -494,7 +494,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // 5. CÁMARAS Y TRANSMISIÓN EN VIVO (JITSI MEET)
+  // 5. CÁMARAS Y TRANSMISIÓN EN VIVO
   // =========================================================================
   function initZoneButtons() {
     const container = document.getElementById("zone-buttons-container");
@@ -510,10 +510,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (zone.statusType === "restringido") statusDot = "🟡";
       if (zone.statusType === "libre") statusDot = "🟢";
 
+      // Solo mostrar "EN VIVO" si realmente tiene transmisión activa
+      const liveBadge = zone.activeStream
+        ? `<span class="zone-live-tag"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>`
+        : `<span class="zone-offline-tag"><i class="fa-regular fa-circle"></i> Fuera de línea</span>`;
+
       btn.innerHTML = `
         <div class="zone-card-title">
           <span>${zone.name}</span>
-          <span class="zone-live-tag"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
+          ${liveBadge}
         </div>
         <div class="zone-card-sub">${zone.sector}</div>
         <div style="font-size:0.7rem; font-weight:700; color:#cbd5e1; margin-top:2px;">
@@ -550,7 +555,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Cargar stream de Jitsi Meet por Zona
+  // Cargar stream (Jitsi, YouTube, Facebook o Placeholder) por Zona
   function loadZoneStream(zoneId, forceReload = false) {
     const zone = APP_CONFIG.zones.find(z => z.id === zoneId);
     if (!zone) return;
@@ -564,47 +569,124 @@ document.addEventListener("DOMContentLoaded", () => {
     statusPill.className = `stream-meta-status tag-${zone.statusType}`;
     document.getElementById("current-zone-reporter").textContent = zone.reporter;
 
-    // Actualizar botón para abrir en App de Jitsi
+    const jitsiContainer = document.getElementById("jitsi-meet-holder");
+    const placeholder = document.getElementById("stream-placeholder");
     const externalBtn = document.getElementById("btn-open-jitsi-external");
-    const jitsiUrl = `https://meet.jit.si/${zone.jitsiRoom}`;
-    externalBtn.href = jitsiUrl;
 
-    // Si ya estamos en esta sala y no forzamos recarga, no reiniciar
-    if (state.currentRoom === zone.jitsiRoom && !forceReload) {
+    // Si la zona NO tiene transmisión activa real, mostrar pantalla de espera limpia
+    if (!zone.activeStream) {
+      jitsiContainer.innerHTML = "";
+      if (placeholder) {
+        placeholder.classList.remove("hidden");
+        placeholder.innerHTML = `
+          <div class="placeholder-icon"><i class="fa-solid fa-satellite-dish"></i></div>
+          <h4>Sin transmisión activa en ${zone.name}</h4>
+          <p>El reportero de este sector aún no ha encendido su cámara o la señal fue suspendida momentáneamente.</p>
+          <span style="font-size:0.75rem; color:#94a3b8; margin-top:6px;"><i class="fa-solid fa-info-circle"></i> Consulta las otras zonas o el Minuto a Minuto.</span>
+        `;
+      }
+      if (externalBtn) externalBtn.style.display = "none";
       renderZoneContextFeed(zoneId);
       return;
     }
 
-    state.currentRoom = zone.jitsiRoom;
-    const jitsiContainer = document.getElementById("jitsi-meet-holder");
-    jitsiContainer.innerHTML = "";
+    // Si tiene transmisión activa
+    if (placeholder) placeholder.classList.add("hidden");
+    if (externalBtn) externalBtn.style.display = "inline-flex";
 
-    // Destruir instancia previa de Jitsi API si existe
+    // Actualizar enlace de app externa
+    const isYouTube = zone.streamType === "youtube" || (zone.streamUrl && zone.streamUrl.includes("youtu"));
+    const isFacebook = zone.streamType === "facebook" || (zone.streamUrl && zone.streamUrl.includes("facebook.com"));
+
+    if (isYouTube) {
+      externalBtn.href = zone.streamUrl;
+      externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
+      embedYouTubeLive(jitsiContainer, zone.streamUrl);
+    } else if (isFacebook) {
+      externalBtn.href = zone.streamUrl;
+      externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
+      embedFacebookLive(jitsiContainer, zone.streamUrl);
+    } else {
+      // Jitsi Meet
+      const jitsiUrl = zone.streamUrl || `https://meet.jit.si/${zone.jitsiRoom}`;
+      externalBtn.href = jitsiUrl;
+      externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> App Jitsi`;
+      embedJitsiStream(jitsiContainer, zone, forceReload);
+    }
+
+    // Renderizar noticias contextuales de la zona
+    renderZoneContextFeed(zoneId);
+  }
+
+  function embedYouTubeLive(container, url) {
+    container.innerHTML = "";
+    // Extraer ID de video si es enlace estándar
+    let videoId = "";
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+      videoId = match[2];
+    }
+    const embedSrc = videoId 
+      ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0` 
+      : url;
+
+    const iframe = document.createElement("iframe");
+    iframe.src = embedSrc;
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+    iframe.allowFullscreen = true;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "none";
+    container.appendChild(iframe);
+  }
+
+  function embedFacebookLive(container, url) {
+    container.innerHTML = "";
+    const encodedUrl = encodeURIComponent(url);
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://www.facebook.com/plugins/video.php?href=${encodedUrl}&show_text=false&autoplay=true`;
+    iframe.allow = "autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "none";
+    container.appendChild(iframe);
+  }
+
+  function embedJitsiStream(container, zone, forceReload) {
+    if (state.currentRoom === zone.jitsiRoom && !forceReload) {
+      return;
+    }
+
+    state.currentRoom = zone.jitsiRoom;
+    container.innerHTML = "";
+
     if (state.jitsiApi) {
-      try {
-        state.jitsiApi.dispose();
-      } catch (e) {
-        console.warn("Error al cerrar sala Jitsi anterior:", e);
-      }
+      try { state.jitsiApi.dispose(); } catch (e) { }
       state.jitsiApi = null;
     }
 
-    // Intentar inicializar con JitsiMeetExternalAPI si la librería cargó correctamente
     if (typeof JitsiMeetExternalAPI !== "undefined") {
       try {
         const domain = "meet.jit.si";
         const options = {
           roomName: zone.jitsiRoom,
-          parentNode: jitsiContainer,
+          parentNode: container,
           width: "100%",
           height: "100%",
+          userInfo: {
+            displayName: "Espectador Ciudadano"
+          },
           configOverwrite: {
             startWithAudioMuted: true,
-            startWithVideoMuted: false,
+            startWithVideoMuted: true,
+            prejoinConfig: { enabled: false },
             prejoinPageEnabled: false,
             disableDeepLinking: true,
+            disableInviteFunctions: true,
             toolbarButtons: [
-              'microphone', 'camera', 'fullscreen', 'hangup', 'tileview', 'settings'
+              'fullscreen', 'tileview', 'settings'
             ]
           },
           interfaceConfigOverwrite: {
@@ -616,21 +698,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         state.jitsiApi = new JitsiMeetExternalAPI(domain, options);
       } catch (err) {
-        console.warn("Fallo al inicializar Jitsi Meet API, aplicando iframe fallback:", err);
-        useIframeFallback(jitsiContainer, zone.jitsiRoom);
+        useIframeFallback(container, zone.jitsiRoom);
       }
     } else {
-      // Fallback nativo directo mediante iframe responsive
-      useIframeFallback(jitsiContainer, zone.jitsiRoom);
+      useIframeFallback(container, zone.jitsiRoom);
     }
-
-    // Renderizar noticias contextuales de la zona
-    renderZoneContextFeed(zoneId);
   }
 
   function useIframeFallback(container, roomName) {
     const iframe = document.createElement("iframe");
-    iframe.src = `https://meet.jit.si/${roomName}#config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true`;
+    iframe.src = `https://meet.jit.si/${roomName}#config.prejoinConfig.enabled=false&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true&userInfo.displayName=%22Espectador%22`;
     iframe.allow = "camera; microphone; fullscreen; display-capture; autoplay";
     iframe.style.width = "100%";
     iframe.style.height = "100%";

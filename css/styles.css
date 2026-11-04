@@ -707,6 +707,12 @@ body {
   font-weight: 700;
 }
 
+.btn-zone-card .zone-offline-tag {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 /* Tarjeta del Reproductor */
 .stream-card {
   background: var(--bg-secondary);
