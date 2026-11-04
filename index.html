@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=8.0">
+  <link rel="stylesheet" href="css/styles.css?v=9.0">
 </head>
 <body class="theme-dark">
 
@@ -330,23 +330,39 @@
         </div>
 
         <div class="form-group">
-          <label><i class="fa-solid fa-video"></i> ¿Cómo vas a transmitir?</label>
+          <label><i class="fa-solid fa-video"></i> ¿Cómo deseas transmitir?</label>
           <div class="stream-type-selector">
             <label class="radio-card active" id="card-mode-vdo">
               <input type="radio" name="stream_mode" value="vdo" checked>
               <div class="radio-content">
-                <strong><i class="fa-solid fa-camera"></i> Cámara Directa del Celular (VDO.Ninja)</strong>
-                <span>Cero registros. Abre la cámara trasera de tu móvil y transmite con 0.3s de latencia.</span>
+                <strong><i class="fa-solid fa-camera"></i> Cámara Directa del Celular o PC</strong>
+                <span>Cero registros. Abre tu cámara trasera o delantera y transmite al instante sin pasos en inglés.</span>
+              </div>
+            </label>
+            <label class="radio-card" id="card-mode-screenshare">
+              <input type="radio" name="stream_mode" value="screenshare">
+              <div class="radio-content">
+                <strong><i class="fa-solid fa-desktop"></i> Compartir Pantalla (Celular / PC)</strong>
+                <span>Muestra videos, fotos, reportes o noticias que tengas abiertas en tu pantalla.</span>
               </div>
             </label>
             <label class="radio-card" id="card-mode-social">
               <input type="radio" name="stream_mode" value="social">
               <div class="radio-content">
                 <strong><i class="fa-brands fa-facebook"></i> Enlace de Facebook Live o YouTube</strong>
-                <span>Pega el enlace si ya estás transmitiendo en directo en redes sociales.</span>
+                <span>Pega el enlace si ya estás transmitiendo en directo en tus redes sociales.</span>
               </div>
             </label>
           </div>
+        </div>
+
+        <!-- Selector de Cámara (Trasera / Frontal) -->
+        <div class="form-group" id="group-camera-facing">
+          <label><i class="fa-solid fa-camera-rotate"></i> Cámara a encender:</label>
+          <select id="stream-select-camera" class="custom-select">
+            <option value="back" selected>📱 Cámara Trasera (Para enfocar calles, pistas y marcha)</option>
+            <option value="front">🤳 Cámara Frontal (Modo reportero / selfie)</option>
+          </select>
         </div>
 
         <div class="form-group hidden" id="group-stream-url">
@@ -390,8 +406,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=8.0"></script>
-  <script src="js/app.js?v=8.0"></script>
+  <script src="js/data.js?v=9.0"></script>
+  <script src="js/app.js?v=9.0"></script>
 </body>
 </html>
 

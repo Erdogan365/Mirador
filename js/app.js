@@ -804,12 +804,12 @@ document.addEventListener("DOMContentLoaded", () => {
     mediaHolder.innerHTML = "";
 
     // Renderizar Transmisión 100% IN-APP (Sin salir de la web)
-    if (stream.type === "vdo" || stream.room) {
+    if (stream.type === "vdo" || stream.type === "screenshare" || stream.room) {
       if (isMyStream) {
-        // Modo Emisor In-App: La cámara del celular se activa directo dentro de este recuadro
-        embedVdoNinjaBroadcaster(mediaHolder, stream.room, stream.author);
+        // Modo Emisor In-App: La cámara o pantalla se activa directo sin pedir selección en inglés
+        embedVdoNinjaBroadcaster(mediaHolder, stream.room, stream.author, stream.facing || "back", stream.type === "screenshare");
       } else {
-        // Modo Espectador In-App: Ve la señal recibida dentro de este recuadro
+        // Modo Espectador In-App: Ve la señal recibida en grande con fondo adaptativo
         embedVdoNinjaViewer(mediaHolder, stream.room);
       }
     } else if (stream.url && stream.url.includes("youtu")) {
@@ -821,11 +821,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Emisor de Cámara In-App (El reportero transmite aquí mismo sin salir)
-  function embedVdoNinjaBroadcaster(container, roomName, author) {
+  // Emisor In-App (Cámara o Pantalla, automático sin pantallas en inglés)
+  function embedVdoNinjaBroadcaster(container, roomName, author, facing = "back", isScreen = false) {
     container.innerHTML = "";
     const iframe = document.createElement("iframe");
-    iframe.src = `https://vdo.ninja/?push=${roomName}&facing=back&quality=2&bitrate=800&audiobitrate=64&cleanoutput=1&label=${encodeURIComponent(author || "Reportero")}`;
+    const modeParam = isScreen ? "&screenshare" : "&webcam";
+    const facingParam = isScreen ? "" : `&facing=${facing}`;
+    // &webcam o &screenshare junto con &autostart omite la pantalla de selección en inglés
+    iframe.src = `https://vdo.ninja/?push=${roomName}${modeParam}&autostart${facingParam}&lang=es&quality=2&bitrate=1200&audiobitrate=64&cleanoutput=1&label=${encodeURIComponent(author || "Reportero")}`;
     iframe.allow = "camera; microphone; fullscreen; display-capture; autoplay";
     iframe.allowFullscreen = true;
     iframe.style.width = "100%";
@@ -834,11 +837,12 @@ document.addEventListener("DOMContentLoaded", () => {
     container.appendChild(iframe);
   }
 
-  // Visor de Cámara In-App (Los espectadores ven aquí mismo sin salir)
+  // Visor de Cámara In-App (Los espectadores ven el video ampliado al máximo con blur ambiental)
   function embedVdoNinjaViewer(container, roomName) {
     container.innerHTML = "";
     const iframe = document.createElement("iframe");
-    iframe.src = `https://vdo.ninja/?view=${roomName}&autoplay=1&cleanoutput=1&controls=1`;
+    // &blur llena los laterales de videos verticales con desenfoque dinámico y &scale=100 maximiza el tamaño
+    iframe.src = `https://vdo.ninja/?view=${roomName}&autoplay=1&cleanoutput=1&controls=1&blur&scale=100&lang=es`;
     iframe.allow = "autoplay; camera; microphone; fullscreen; display-capture; picture-in-picture";
     iframe.allowFullscreen = true;
     iframe.style.width = "100%";
@@ -900,8 +904,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputLocation = document.getElementById("stream-input-location");
     const inputUrl = document.getElementById("stream-input-url");
     const inputAuthor = document.getElementById("stream-input-author");
+    const selectCamera = document.getElementById("stream-select-camera");
     const radioInputs = document.querySelectorAll('input[name="stream_mode"]');
     const groupUrl = document.getElementById("group-stream-url");
+    const groupCamera = document.getElementById("group-camera-facing");
 
     if (btnClose) btnClose.addEventListener("click", closeStreamCreatorModal);
     if (btnCancel) btnCancel.addEventListener("click", closeStreamCreatorModal);
@@ -922,9 +928,15 @@ document.addEventListener("DOMContentLoaded", () => {
         radio.closest(".radio-card")?.classList.add("active");
         if (radio.value === "social") {
           groupUrl?.classList.remove("hidden");
+          groupCamera?.classList.add("hidden");
           if (inputUrl) inputUrl.required = true;
+        } else if (radio.value === "screenshare") {
+          groupUrl?.classList.add("hidden");
+          groupCamera?.classList.add("hidden");
+          if (inputUrl) inputUrl.required = false;
         } else {
           groupUrl?.classList.add("hidden");
+          groupCamera?.classList.remove("hidden");
           if (inputUrl) inputUrl.required = false;
         }
       });
@@ -938,6 +950,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const selectedRadio = document.querySelector('input[name="stream_mode"]:checked');
         const mode = selectedRadio ? selectedRadio.value : "vdo";
         const url = inputUrl ? inputUrl.value.trim() : "";
+        const cameraFacing = selectCamera ? selectCamera.value : "back";
 
         if (!location) return;
 
@@ -949,11 +962,12 @@ document.addEventListener("DOMContentLoaded", () => {
           location: location,
           author: author,
           time: timeNow,
-          type: mode
+          type: mode,
+          facing: cameraFacing
         };
 
-        if (mode === "vdo") {
-          // Generar sala única de cámara
+        if (mode === "vdo" || mode === "screenshare") {
+          // Generar sala única de cámara o pantalla
           const randomId = Math.random().toString(36).substring(2, 8);
           const cleanLoc = location.replace(/[^a-zA-Z0-9]/g, "");
           newStream.room = `ParoHco_${cleanLoc}_${randomId}`;
