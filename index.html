@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MONITOR CIUDADANO EN VIVO - Reportes y Bloqueos</title>
+  <meta name="description" content="Plataforma ciudadana en tiempo real para seguimiento de zonas, bloqueos viales, transmisiones en vivo y reportes minuto a minuto.">
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- Open Graph para compartir en WhatsApp -->
+  <meta property="og:title" content="🚨 Monitor Ciudadano en Vivo: Mapa de Bloqueos y Transmisiones">
+  <meta property="og:description" content="Consulta el estado de las vías, cámaras en vivo por zonas y alertas al minuto.">
+  <meta property="og:type" content="website">
+
+  <!-- Leaflet CSS (Mapa interactivo OpenStreetMap - Gratuito) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="theme-dark">
+
+  <!-- ==================== BANNER DE ALERTA CRÍTICA ==================== -->
+  <div id="urgent-ticker" class="urgent-ticker" role="alert">
+    <div class="ticker-badge">
+      <span class="pulse-dot"></span>
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>URGENTE</span>
+    </div>
+    <div class="ticker-content" id="ticker-text">
+      Cargando últimas alertas del paro...
+    </div>
+    <div class="ticker-actions">
+      <button id="btn-sound-toggle" title="Activar/Silenciar alarma de alertas" class="ticker-btn">
+        <i class="fa-solid fa-volume-high" id="sound-icon"></i>
+      </button>
+      <button id="btn-open-alert" title="Ver detalle de alerta" class="ticker-btn">
+        <i class="fa-solid fa-circle-info"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== CABECERA PRINCIPAL ==================== -->
+  <header class="app-header">
+    <div class="header-main">
+      <div class="brand">
+        <div class="live-indicator">
+          <span class="live-blink"></span>
+          <span>EN VIVO</span>
+        </div>
+        <h1>MONITOR <span>CIUDADANO</span></h1>
+      </div>
+      <div class="header-meta">
+        <span class="update-badge" id="last-updated-badge"><i class="fa-regular fa-clock"></i> Actualizado: <b id="time-now">--:--</b></span>
+        <button id="btn-refresh" class="btn-icon" title="Refrescar datos">
+          <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navegación por pestañas (Desktop & Mobile Top) -->
+    <nav class="view-tabs" role="tablist">
+      <button class="tab-btn active" data-view="mapa" role="tab" aria-selected="true">
+        <i class="fa-solid fa-map-location-dot"></i>
+        <span>Mapa Bloqueos</span>
+      </button>
+      <button class="tab-btn" data-view="envivo" role="tab" aria-selected="false">
+        <i class="fa-solid fa-video"></i>
+        <span>Cámaras en Vivo</span>
+      </button>
+      <button class="tab-btn" data-view="minuto" role="tab" aria-selected="false">
+        <i class="fa-solid fa-bolt"></i>
+        <span>Minuto a Minuto</span>
+        <span class="badge-count" id="feed-count">0</span>
+      </button>
+      <button class="tab-btn" data-view="chat" role="tab" aria-selected="false">
+        <i class="fa-solid fa-comments"></i>
+        <span>Chat Zonal</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- ==================== CONTENEDOR PRINCIPAL ==================== -->
+  <main class="main-content">
+
+    <!-- ==================== VISTA 1: MAPA DE BLOQUEOS ==================== -->
+    <section id="view-mapa" class="view-panel active-view">
+      <!-- Filtros rápidos del mapa -->
+      <div class="map-controls-bar">
+        <div class="map-filters">
+          <button class="filter-chip active" data-filter="all">Todos (<span id="count-all">0</span>)</button>
+          <button class="filter-chip chip-bloqueo" data-filter="bloqueo">🛑 Bloqueados (<span id="count-bloqueos">0</span>)</button>
+          <button class="filter-chip chip-restringido" data-filter="restringido">⚠️ Parcial (<span id="count-restringidos">0</span>)</button>
+          <button class="filter-chip chip-libre" data-filter="libre">✅ Libre (<span id="count-libres">0</span>)</button>
+          <button class="filter-chip chip-camara" data-filter="camara">📹 Con Cámara (<span id="count-camaras">0</span>)</button>
+        </div>
+        <div class="map-extra-btns">
+          <button id="btn-geolocate" class="btn-pill" title="Centrar en mi ubicación">
+            <i class="fa-solid fa-location-crosshairs"></i> Mi ubicación
+          </button>
+        </div>
+      </div>
+
+      <!-- Contenedor del Mapa Leaflet -->
+      <div class="map-wrapper">
+        <div id="map" class="map-canvas"></div>
+
+        <!-- Leyenda flotante minimizable -->
+        <div class="map-floating-legend" id="map-legend">
+          <div class="legend-header" id="legend-toggle">
+            <span><i class="fa-solid fa-layer-group"></i> Leyenda de Vías</span>
+            <i class="fa-solid fa-chevron-up" id="legend-chevron"></i>
+          </div>
+          <div class="legend-body" id="legend-content">
+            <div class="legend-item"><span class="legend-color dot-red"></span> Bloqueo Total / Piedras / Llantas</div>
+            <div class="legend-item"><span class="legend-color dot-yellow"></span> Paso Restringido / Marchas</div>
+            <div class="legend-item"><span class="legend-color dot-green"></span> Tránsito Fluido / Despejado</div>
+            <div class="legend-item"><span class="legend-color dot-blue"></span> Reportero Transmitiendo</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumen rápido de puntos de bloqueo en tarjetas compactas -->
+      <div class="points-summary-section">
+        <div class="section-title">
+          <h3><i class="fa-solid fa-road-barrier"></i> Puntos Clave Notificados</h3>
+          <span class="subtext">Toca un punto para verlo en el mapa</span>
+        </div>
+        <div class="points-cards-scroll" id="points-cards-container">
+          <!-- Se llena dinámicamente con JavaScript -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VISTA 2: CÁMARAS Y TRANSMISIÓN EN VIVO ==================== -->
+    <section id="view-envivo" class="view-panel">
+      <!-- Selector de Zonas de Transmisión -->
+      <div class="zone-selector-wrapper">
+        <label class="selector-label"><i class="fa-solid fa-location-dot"></i> Selecciona la Zona a Monitorear:</label>
+        <div class="zone-buttons-grid" id="zone-buttons-container">
+          <!-- Botones de zona inyectados dinámicamente -->
+        </div>
+      </div>
+
+      <!-- Tarjeta Principal del Reproductor Jitsi / Video -->
+      <div class="stream-card">
+        <div class="stream-header">
+          <div class="stream-info">
+            <div class="stream-badge-live">
+              <span class="live-blink"></span> <span id="current-zone-name">ZONA NORTE</span>
+            </div>
+            <span class="stream-meta-status" id="current-zone-status-pill">🔴 Bloqueo de puente</span>
+          </div>
+          <div class="stream-actions">
+            <button id="btn-fullscreen-stream" class="btn-sm" title="Pantalla completa">
+              <i class="fa-solid fa-expand"></i>
+            </button>
+            <a id="btn-open-jitsi-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-sm btn-accent" title="Abrir directo en Jitsi Meet">
+              <i class="fa-solid fa-up-right-from-square"></i> App Jitsi
+            </a>
+          </div>
+        </div>
+
+        <!-- Marco del reproductor Jitsi Meet -->
+        <div class="stream-container" id="stream-container">
+          <div id="jitsi-meet-holder" class="jitsi-holder">
+            <!-- Contenedor API Jitsi o iframe de respaldo -->
+          </div>
+          <div id="stream-placeholder" class="stream-placeholder hidden">
+            <div class="placeholder-icon"><i class="fa-solid fa-tower-broadcast"></i></div>
+            <h4>Esperando señal del reportero</h4>
+            <p>El corresponsal de esta zona conectará su cámara en cuanto inicie la movilización.</p>
+            <button class="btn-primary" id="btn-reload-stream"><i class="fa-solid fa-rotate-right"></i> Recargar Sala</button>
+          </div>
+        </div>
+
+        <div class="stream-footer">
+          <div class="reporter-info">
+            <i class="fa-solid fa-user-shield"></i>
+            <span>Reportero asignado: <strong id="current-zone-reporter">Equipo Móvil 1</strong></span>
+          </div>
+          <div class="reporter-link-help">
+            <a href="#" id="link-reporter-guide" class="text-link"><i class="fa-solid fa-camera"></i> ¿Eres reportero? Transmite aquí</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Minuto a minuto contextual de la zona seleccionada -->
+      <div class="zone-feed-card">
+        <div class="section-title">
+          <h4><i class="fa-solid fa-clock-rotate-left"></i> Novedades recientes en esta zona</h4>
+        </div>
+        <div class="zone-feed-list" id="zone-feed-list">
+          <!-- Mensajes específicos de la zona -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VISTA 3: MINUTO A MINUTO (FEED GENERAL) ==================== -->
+    <section id="view-minuto" class="view-panel">
+      <div class="feed-header-bar">
+        <div class="feed-info">
+          <h3><i class="fa-solid fa-newspaper"></i> Cronología en Tiempo Real</h3>
+          <p>Información confirmada por frentes y reporteros comunitarios</p>
+        </div>
+        <div class="feed-filter-select">
+          <select id="feed-zone-filter" class="custom-select">
+            <option value="all">Ver todas las zonas</option>
+            <!-- Opciones agregadas dinámicamente -->
+          </select>
+        </div>
+      </div>
+
+      <!-- Timeline vertical -->
+      <div class="timeline-container" id="timeline-container">
+        <!-- Tarjetas del timeline inyectadas dinámicamente -->
+      </div>
+    </section>
+
+    <!-- ==================== VISTA 4: CHAT COMUNITARIO ==================== -->
+    <section id="view-chat" class="view-panel">
+      <div class="chat-wrapper">
+        <div class="chat-zone-tabs" id="chat-zone-tabs">
+          <!-- Pestañas para cambiar el chat de zona -->
+        </div>
+
+        <div class="chat-box-container">
+          <div class="chat-banner-warning">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>Canal ciudadano moderado. Comparte solo hechos verificados. No compartas cadenas falsas.</span>
+          </div>
+
+          <!-- Mensajes del chat -->
+          <div class="chat-messages" id="chat-messages-container">
+            <!-- Mensajes simulados / reales -->
+          </div>
+
+          <!-- Formulario de envío -->
+          <form id="chat-form" class="chat-input-bar">
+            <input type="text" id="chat-user-name" placeholder="Tu Apodo/Nombre" maxlength="25" class="input-nickname" required>
+            <div class="input-message-group">
+              <input type="text" id="chat-message-text" placeholder="Escribe tu reporte o consulta..." maxlength="250" autocomplete="off" required>
+              <button type="submit" class="btn-send-chat" title="Enviar mensaje">
+                <i class="fa-solid fa-paper-plane"></i>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Botón para reportar por WhatsApp oficial -->
+        <div class="whatsapp-report-card">
+          <div class="wa-content">
+            <i class="fa-brands fa-whatsapp wa-big-icon"></i>
+            <div>
+              <h4>¿Tienes fotos o reportes urgentes?</h4>
+              <p>Envía tu información verificada a la central de coordinación comunitaria.</p>
+            </div>
+          </div>
+          <a id="btn-wa-report" href="https://wa.me/?text=Hola,%20deseo%20reportar%20una%20incidencia%20en%20el%20paro" target="_blank" rel="noopener noreferrer" class="btn-whatsapp">
+            <i class="fa-brands fa-whatsapp"></i> Reportar por WhatsApp
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== MODAL DE ALERTA CRÍTICA POPUP ==================== -->
+  <div id="alert-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card alert-modal-card">
+      <div class="modal-icon-alert">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <div class="modal-header">
+        <span class="modal-tag">ALERTA CRÍTICA DE ÚLTIMO MINUTO</span>
+        <h3 id="modal-alert-title">Enfrentamientos y Vía Cerrada</h3>
+        <span class="modal-time" id="modal-alert-time"><i class="fa-regular fa-clock"></i> Hace instantes</span>
+      </div>
+      <div class="modal-body">
+        <p id="modal-alert-body">Se reporta bloqueo total en los principales accesos. Se recomienda a la ciudadanía tomar rutas alternas y mantenerse a resguardo.</p>
+        <div class="modal-extra-info" id="modal-alert-location">
+          <i class="fa-solid fa-location-dot"></i> <span>Ubicación: Ovalo de Cayhuayna</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-gotomap" class="btn-primary">
+          <i class="fa-solid fa-map-location-dot"></i> Ver en el Mapa
+        </button>
+        <button id="btn-modal-close" class="btn-secondary">Entendido / Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL GUÍA PARA REPORTEROS ==================== -->
+  <div id="reporter-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-video"></i> Manual para Reporteros en Vivo</h3>
+        <button class="btn-close-modal" id="btn-close-reporter-modal">&times;</button>
+      </div>
+      <div class="modal-body reporter-steps">
+        <ol>
+          <li><strong>Elige tu zona:</strong> Cada reportero tiene un enlace único de Jitsi Meet para evitar interferir con otros sectores.</li>
+          <li><strong>Instala Jitsi Meet (Opcional):</strong> Funciona desde el navegador móvil Chrome/Safari o desde la app gratuita Jitsi Meet.</li>
+          <li><strong>Activa la cámara trasera:</strong> Para una mejor cobertura panorámica en horizontal.</li>
+          <li><strong>Silencia tu micrófono cuando haya mucho ruido</strong> para ahorrar batería y no saturar el canal.</li>
+        </ol>
+        <div class="links-box" id="reporter-zones-links">
+          <!-- Links de reportero generados por JS -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-reporter-modal-ok">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BARRA INFERIOR DE NAVEGACIÓN MÓVIL ==================== -->
+  <nav class="mobile-bottom-bar">
+    <button class="bottom-nav-item active" data-view="mapa">
+      <i class="fa-solid fa-map-location-dot"></i>
+      <span>Mapa</span>
+    </button>
+    <button class="bottom-nav-item" data-view="envivo">
+      <i class="fa-solid fa-video"></i>
+      <span>En Vivo</span>
+      <span class="live-dot-badge"></span>
+    </button>
+    <button class="bottom-nav-item" data-view="minuto">
+      <i class="fa-solid fa-bolt"></i>
+      <span>Minuto</span>
+    </button>
+    <button class="bottom-nav-item" data-view="chat">
+      <i class="fa-solid fa-comments"></i>
+      <span>Chat</span>
+    </button>
+  </nav>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Jitsi Meet External API -->
+  <script src="https://meet.jit.si/external_api.js"></script>
+
+  <!-- Scripts de la Aplicación -->
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
+
