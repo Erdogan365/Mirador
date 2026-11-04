@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=5.0">
+  <link rel="stylesheet" href="css/styles.css?v=6.0">
 </head>
 <body class="theme-dark">
 
@@ -175,9 +175,6 @@
             <button id="btn-fullscreen-stream" class="btn-sm" title="Pantalla completa">
               <i class="fa-solid fa-expand"></i>
             </button>
-            <a id="btn-open-stream-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-sm btn-accent" title="Abrir en plataforma original">
-              <i class="fa-solid fa-up-right-from-square"></i> Ver original
-            </a>
             <button id="btn-end-stream" class="btn-sm btn-danger-action" title="Dar por finalizada esta transmisión">
               <i class="fa-solid fa-power-off"></i> Finalizar En Vivo
             </button>
@@ -359,59 +356,9 @@
 
         <div class="modal-footer">
           <button type="button" class="btn-secondary" id="btn-cancel-create-stream">Cancelar</button>
-          <button type="submit" class="btn-primary" id="btn-submit-stream"><i class="fa-solid fa-circle-play"></i> Iniciar y Publicar En Vivo</button>
+          <button type="submit" class="btn-primary" id="btn-submit-stream"><i class="fa-solid fa-circle-play"></i> Iniciar y Transmitir Aquí</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL DE ÉXITO PARA EL REPORTERO ==================== -->
-  <div id="reporter-broadcast-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 style="color:#34d399;"><i class="fa-solid fa-circle-check"></i> ¡Transmisión Creada con Éxito!</h3>
-        <button class="btn-close-modal" id="btn-close-reporter-broadcast">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p>Tu señal en vivo ya está publicada en la web para todos los ciudadanos.</p>
-        <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; margin:12px 0;">
-          <strong style="color:#fff; display:block; margin-bottom:4px;">Paso para transmitir:</strong>
-          <span style="font-size:0.8rem; color:#cbd5e1;">Toca el botón verde para abrir la cámara de tu celular y darle <em>"Compartir Cámara"</em>. ¡No necesitas registrarte ni instalar nada!</span>
-        </div>
-      </div>
-      <div class="modal-footer" style="flex-direction:column; gap:8px;">
-        <a id="btn-open-camera-now" href="#" target="_blank" class="btn-primary" style="width:100%; justify-content:center; padding:10px;">
-          <i class="fa-solid fa-camera"></i> Abrir mi Cámara para Emitir
-        </a>
-        <a id="btn-send-camera-wa" href="#" target="_blank" class="btn-whatsapp" style="width:100%; justify-content:center; padding:8px;">
-          <i class="fa-brands fa-whatsapp"></i> Enviar este Link de Cámara a un Reportero
-        </a>
-        <button type="button" class="btn-secondary" id="btn-done-reporter-broadcast" style="width:100%;">Ver Transmisión en la Web</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL GUÍA PARA REPORTEROS ==================== -->
-  <div id="reporter-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-video"></i> Manual para Reporteros en Vivo</h3>
-        <button class="btn-close-modal" id="btn-close-reporter-modal">&times;</button>
-      </div>
-      <div class="modal-body reporter-steps">
-        <ol>
-          <li><strong>Elige tu zona:</strong> Cada reportero tiene un enlace único de Jitsi Meet para evitar interferir con otros sectores.</li>
-          <li><strong>Instala Jitsi Meet (Opcional):</strong> Funciona desde el navegador móvil Chrome/Safari o desde la app gratuita Jitsi Meet.</li>
-          <li><strong>Activa la cámara trasera:</strong> Para una mejor cobertura panorámica en horizontal.</li>
-          <li><strong>Silencia tu micrófono cuando haya mucho ruido</strong> para ahorrar batería y no saturar el canal.</li>
-        </ol>
-        <div class="links-box" id="reporter-zones-links">
-          <!-- Links de reportero generados por JS -->
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="btn-reporter-modal-ok">Entendido</button>
-      </div>
     </div>
   </div>
 
@@ -440,8 +387,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=5.0"></script>
-  <script src="js/app.js?v=5.0"></script>
+  <script src="js/data.js?v=6.0"></script>
+  <script src="js/app.js?v=6.0"></script>
 </body>
 </html>
 

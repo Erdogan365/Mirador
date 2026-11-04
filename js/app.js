@@ -634,12 +634,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     state.currentStreamId = streamId;
 
-    document.getElementById("current-stream-title").textContent = stream.location.toUpperCase();
-    document.getElementById("current-stream-location").textContent = `📍 ${stream.location}`;
+    const isMyStream = state.myActiveStreamId === stream.id;
+
+    if (isMyStream && (stream.type === "vdo" || stream.room)) {
+      document.getElementById("current-stream-title").textContent = "TU CÁMARA EN VIVO";
+      document.getElementById("current-stream-location").textContent = `🔴 Transmitiendo desde: ${stream.location}`;
+    } else {
+      document.getElementById("current-stream-title").textContent = stream.location.toUpperCase();
+      document.getElementById("current-stream-location").textContent = `📍 ${stream.location}`;
+    }
+
     document.getElementById("current-stream-author").textContent = stream.author || "Ciudadano en el punto";
     document.getElementById("current-stream-time").textContent = `• Iniciado: ${stream.time}`;
 
-    const externalBtn = document.getElementById("btn-open-stream-external");
     const btnShareWa = document.getElementById("btn-share-stream-wa");
     const mediaHolder = document.getElementById("stream-media-holder");
     const placeholder = document.getElementById("no-streams-placeholder");
@@ -647,36 +654,60 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnEndFooter = document.getElementById("btn-end-stream-footer");
 
     if (placeholder) placeholder.classList.add("hidden");
-    if (externalBtn) externalBtn.style.display = "inline-flex";
 
     // Los botones de finalizar siempre están disponibles cuando hay un stream en vivo
     if (btnEnd) btnEnd.style.display = "inline-flex";
     if (btnEndFooter) btnEndFooter.style.display = "inline-flex";
 
+    // Configurar enlace directo de WhatsApp para compartir este stream
+    if (btnShareWa) {
+      btnShareWa.style.display = "inline-flex";
+      const baseUrl = window.location.origin + window.location.pathname;
+      let shareParam = "";
+      if (stream.room) {
+        shareParam = `?room=${encodeURIComponent(stream.room)}&loc=${encodeURIComponent(stream.location)}`;
+      } else if (stream.url) {
+        shareParam = `?url=${encodeURIComponent(stream.url)}&loc=${encodeURIComponent(stream.location)}`;
+      }
+      const directLiveUrl = baseUrl + shareParam;
+      const waText = encodeURIComponent(`🔴 EN VIVO desde ${stream.location}: Sintoniza la transmisión aquí 👉 ${directLiveUrl}`);
+      btnShareWa.href = `https://wa.me/?text=${waText}`;
+    }
+
     mediaHolder.innerHTML = "";
 
-    // Renderizar Transmisión
+    // Renderizar Transmisión 100% IN-APP (Sin salir de la web)
     if (stream.type === "vdo" || stream.room) {
-      // VDO.Ninja: Cámara directa en tiempo real sin cuentas ni registros
-      const viewerUrl = `https://vdo.ninja/?view=${stream.room}&autoplay=1&cleanoutput=1&controls=1`;
-      externalBtn.href = viewerUrl;
-      externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Ver Pantalla Completa`;
-      embedVdoNinjaViewer(mediaHolder, stream.room);
+      if (isMyStream) {
+        // Modo Emisor In-App: La cámara del celular se activa directo dentro de este recuadro
+        embedVdoNinjaBroadcaster(mediaHolder, stream.room, stream.author);
+      } else {
+        // Modo Espectador In-App: Ve la señal recibida dentro de este recuadro
+        embedVdoNinjaViewer(mediaHolder, stream.room);
+      }
     } else if (stream.url && stream.url.includes("youtu")) {
-      externalBtn.href = stream.url;
-      externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
       embedYouTubeLive(mediaHolder, stream.url);
     } else if (stream.url && (stream.url.includes("facebook") || stream.url.includes("fb.watch"))) {
-      externalBtn.href = stream.url;
-      externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
       embedFacebookLive(mediaHolder, stream.url);
     } else {
-      externalBtn.href = stream.url;
-      externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Abrir Enlace`;
       embedGenericLive(mediaHolder, stream.url);
     }
   }
 
+  // Emisor de Cámara In-App (El reportero transmite aquí mismo sin salir)
+  function embedVdoNinjaBroadcaster(container, roomName, author) {
+    container.innerHTML = "";
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://vdo.ninja/?push=${roomName}&facing=back&quality=2&bitrate=800&audiobitrate=64&cleanoutput=1&label=${encodeURIComponent(author || "Reportero")}`;
+    iframe.allow = "camera; microphone; fullscreen; display-capture; autoplay";
+    iframe.allowFullscreen = true;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "none";
+    container.appendChild(iframe);
+  }
+
+  // Visor de Cámara In-App (Los espectadores ven aquí mismo sin salir)
   function embedVdoNinjaViewer(container, roomName) {
     container.innerHTML = "";
     const iframe = document.createElement("iframe");
@@ -692,7 +723,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function embedYouTubeLive(container, url) {
     container.innerHTML = "";
     let videoId = "";
-    // Soporta youtube.com/watch?v=, youtu.be/, youtube.com/live/
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length >= 11) {
@@ -728,11 +758,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function embedGenericLive(container, url) {
     container.innerHTML = `
       <div class="stream-generic-box">
-        <h4><i class="fa-solid fa-tower-broadcast"></i> Transmisión en Directo</h4>
-        <p>Esta transmisión se está emitiendo en vivo a través de una plataforma externa.</p>
-        <a href="${url}" target="_blank" rel="noopener noreferrer" class="btn-primary">
-          <i class="fa-solid fa-up-right-from-square"></i> Sintonizar En Vivo Ahora
-        </a>
+        <h4><i class="fa-solid fa-satellite-dish"></i> Transmisión en Directo</h4>
+        <p>Reproduciendo señal en vivo directamente en la plataforma.</p>
+        <iframe src="${url}" allow="autoplay; fullscreen" style="width:100%; height:100%; border:none;"></iframe>
       </div>
     `;
   }
@@ -748,20 +776,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const radioInputs = document.querySelectorAll('input[name="stream_mode"]');
     const groupUrl = document.getElementById("group-stream-url");
 
-    // Modal de éxito reportero
-    const broadcastModal = document.getElementById("reporter-broadcast-modal");
-    const btnCloseBroadcast = document.getElementById("btn-close-reporter-broadcast");
-    const btnDoneBroadcast = document.getElementById("btn-done-reporter-broadcast");
-    const btnOpenCameraNow = document.getElementById("btn-open-camera-now");
-    const btnSendCameraWa = document.getElementById("btn-send-camera-wa");
-
     if (btnClose) btnClose.addEventListener("click", closeStreamCreatorModal);
     if (btnCancel) btnCancel.addEventListener("click", closeStreamCreatorModal);
     modal?.addEventListener("click", (e) => { if (e.target === modal) closeStreamCreatorModal(); });
-
-    if (btnCloseBroadcast) btnCloseBroadcast.addEventListener("click", () => broadcastModal.classList.add("hidden"));
-    if (btnDoneBroadcast) btnDoneBroadcast.addEventListener("click", () => broadcastModal.classList.add("hidden"));
-    broadcastModal?.addEventListener("click", (e) => { if (e.target === broadcastModal) broadcastModal.classList.add("hidden"); });
 
     // Alternar modo de transmisión
     radioInputs.forEach(radio => {
@@ -800,42 +817,20 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         if (mode === "vdo") {
-          // Generar sala única de VDO.Ninja (sin registros, sin cuentas)
+          // Generar sala única de cámara
           const randomId = Math.random().toString(36).substring(2, 8);
           const cleanLoc = location.replace(/[^a-zA-Z0-9]/g, "");
-          const room = `ParoHco_${cleanLoc}_${randomId}`;
-          newStream.room = room;
-
-          // Enlace del reportero para emitir (con cámara trasera sugerida y optimización de datos móviles)
-          const broadcasterUrl = `https://vdo.ninja/?push=${room}&facing=back&quality=2&bitrate=800&audiobitrate=64&label=${encodeURIComponent(author)}`;
-          newStream.broadcasterUrl = broadcasterUrl;
-
-          state.streams.unshift(newStream);
-          state.myActiveStreamId = streamId;
-          localStorage.setItem("monitor_my_stream_id", streamId);
-          saveStreams();
-
-          // Configurar botones del modal de éxito para el reportero
-          btnOpenCameraNow.href = broadcasterUrl;
-          const waMsg = encodeURIComponent(`Hola, para transmitir en vivo desde ${location}, abre este enlace en tu celular y dale a "Compartir Cámara": ${broadcasterUrl}`);
-          btnSendCameraWa.href = `https://wa.me/?text=${waMsg}`;
-
-          closeStreamCreatorModal();
-          form.reset();
-          broadcastModal.classList.remove("hidden");
+          newStream.room = `ParoHco_${cleanLoc}_${randomId}`;
         } else {
-          // Modo Redes Sociales (Facebook Live o YouTube)
           if (!url) return;
           newStream.url = url;
-
-          state.streams.unshift(newStream);
-          state.myActiveStreamId = streamId;
-          localStorage.setItem("monitor_my_stream_id", streamId);
-          saveStreams();
-
-          closeStreamCreatorModal();
-          form.reset();
         }
+
+        // Guardar como mi transmisión activa local
+        state.streams.unshift(newStream);
+        state.myActiveStreamId = streamId;
+        localStorage.setItem("monitor_my_stream_id", streamId);
+        saveStreams();
 
         // Agregar reporte automático al Minuto a Minuto
         addLiveFeedItem({
@@ -848,7 +843,10 @@ document.addEventListener("DOMContentLoaded", () => {
           source: author
         });
 
-        // Cambiar a la vista de En Vivo y sintonizar
+        closeStreamCreatorModal();
+        form.reset();
+
+        // Cambiar a la vista de En Vivo y sintonizar inmediatamente IN-APP
         const tabEnvivo = document.querySelector('.tab-btn[data-view="envivo"]');
         if (tabEnvivo) tabEnvivo.click();
 
