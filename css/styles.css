@@ -1053,7 +1053,7 @@ body {
   gap: 4px;
 }
 
-/* ==================== VISTA 4: CHAT ZONAL ==================== */
+/* ==================== VISTA 4: CHAT ZONAL (MINNIT CHAT EN VIVO) ==================== */
 .chat-wrapper {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -1062,16 +1062,28 @@ body {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 180px);
-  min-height: 480px;
+  min-height: 520px;
+}
+
+.chat-zone-tabs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0,0,0,0.25);
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 10px;
+  gap: 8px;
 }
 
 .chat-zone-tabs {
   display: flex;
-  background: rgba(0,0,0,0.25);
-  border-bottom: 1px solid var(--border-color);
-  padding: 6px 8px;
   gap: 6px;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-zone-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-tab-chip {
@@ -1084,12 +1096,21 @@ body {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.chat-tab-chip:hover {
+  border-color: var(--accent-cyan);
 }
 
 .chat-tab-chip.active {
   background: var(--accent-cyan);
   color: #042f2e;
   border-color: var(--accent-cyan);
+  font-weight: 700;
 }
 
 .chat-box-container {
@@ -1105,124 +1126,40 @@ body {
   border-bottom: 1px solid rgba(245, 158, 11, 0.2);
   color: var(--accent-yellow);
   padding: 6px 12px;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
-.chat-messages {
+.minnit-chat-frame-container {
+  position: relative;
   flex: 1;
-  padding: 12px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  width: 100%;
+  height: 100%;
+  background: #0f172a;
 }
 
-.chat-msg {
-  background: rgba(255, 255, 255, 0.04);
-  padding: 8px 10px;
-  border-radius: 8px;
-  max-width: 90%;
-  align-self: flex-start;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.chat-msg.msg-mine {
-  align-self: flex-end;
-  background: rgba(6, 182, 212, 0.15);
-  border-color: rgba(6, 182, 212, 0.3);
-}
-
-.chat-msg-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 2px;
-}
-
-.chat-user {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--accent-cyan);
-}
-
-.msg-mine .chat-user {
-  color: #67e8f9;
-}
-
-.chat-time {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-}
-
-.chat-text {
-  font-size: 0.8rem;
-  color: #f8fafc;
-  word-break: break-word;
-}
-
-/* Input del chat */
-.chat-input-bar {
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.input-nickname {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-family: inherit;
-  outline: none;
-}
-
-.input-message-group {
-  display: flex;
-  gap: 6px;
-}
-
-.input-message-group input {
-  flex: 1;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  font-family: inherit;
-  outline: none;
-}
-
-.input-message-group input:focus, .input-nickname:focus {
-  border-color: var(--accent-cyan);
-}
-
-.btn-send-chat {
-  background: var(--accent-cyan);
-  color: #042f2e;
+.minnit-chat-iframe {
+  width: 100%;
+  height: 100%;
   border: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  display: block;
+}
+
+.minnit-loader {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  font-size: 1rem;
-}
-
-.btn-send-chat:hover {
-  background: #22d3ee;
+  gap: 8px;
+  color: var(--accent-cyan);
+  font-size: 0.85rem;
+  font-weight: 600;
+  z-index: 5;
 }
 
 /* Tarjeta Reportar por WhatsApp */

@@ -726,99 +726,63 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // 7. CHAT ZONAL COMUNITARIO
+  // 7. CHAT ZONAL COMUNITARIO EN VIVO (MINNIT CHAT)
   // =========================================================================
   function initChat() {
     const tabsContainer = document.getElementById("chat-zone-tabs");
-    const chatForm = document.getElementById("chat-form");
-    const userInput = document.getElementById("chat-user-name");
-    const msgInput = document.getElementById("chat-message-text");
+    const iframe = document.getElementById("minnit-chat-iframe");
+    const loader = document.getElementById("minnit-loader");
+    const externalLink = document.getElementById("btn-open-minnit-external");
 
-    // Recordar apodo guardado
-    const savedNickname = localStorage.getItem("monitor_chat_nickname");
-    if (savedNickname && userInput) {
-      userInput.value = savedNickname;
-    }
-
-    // Generar chips para las zonas del chat
     if (tabsContainer) {
       tabsContainer.innerHTML = "";
-      APP_CONFIG.zones.forEach(zone => {
+      APP_CONFIG.zones.forEach((zone, index) => {
         const chip = document.createElement("button");
         chip.type = "button";
         chip.className = `chat-tab-chip ${zone.id === state.currentChatZoneId ? "active" : ""}`;
         chip.dataset.zoneId = zone.id;
-        chip.textContent = `Chat ${zone.name}`;
+        chip.innerHTML = `<i class="fa-solid fa-comments"></i> Chat ${zone.name}`;
 
         chip.addEventListener("click", () => {
           document.querySelectorAll(".chat-tab-chip").forEach(c => c.classList.remove("active"));
           chip.classList.add("active");
           state.currentChatZoneId = zone.id;
-          renderChatMessages();
+          loadMinnitChat(zone.id);
         });
 
         tabsContainer.appendChild(chip);
       });
     }
 
-    // Envío de mensajes
-    if (chatForm) {
-      chatForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const nickname = userInput.value.trim();
-        const text = msgInput.value.trim();
-
-        if (!nickname || !text) return;
-
-        localStorage.setItem("monitor_chat_nickname", nickname);
-
-        const newMsg = {
-          user: nickname,
-          text: text,
-          time: getCurrentTimeFormatted(),
-          isMine: true
-        };
-
-        if (!state.chatMessages[state.currentChatZoneId]) {
-          state.chatMessages[state.currentChatZoneId] = [];
-        }
-
-        state.chatMessages[state.currentChatZoneId].push(newMsg);
-        msgInput.value = "";
-        renderChatMessages();
+    if (iframe && loader) {
+      iframe.addEventListener("load", () => {
+        loader.style.display = "none";
       });
     }
 
-    renderChatMessages();
+    // Cargar la sala inicial
+    loadMinnitChat(state.currentChatZoneId);
   }
 
-  function renderChatMessages() {
-    const container = document.getElementById("chat-messages-container");
-    if (!container) return;
+  function loadMinnitChat(zoneId) {
+    const zone = APP_CONFIG.zones.find(z => z.id === zoneId) || APP_CONFIG.zones[0];
+    const iframe = document.getElementById("minnit-chat-iframe");
+    const loader = document.getElementById("minnit-loader");
+    const externalLink = document.getElementById("btn-open-minnit-external");
 
-    container.innerHTML = "";
-    const list = state.chatMessages[state.currentChatZoneId] || [];
+    if (!zone || !iframe) return;
 
-    if (list.length === 0) {
-      container.innerHTML = `<div style="text-align:center; color:#64748b; font-size:0.75rem; margin-top:20px;">No hay mensajes aún en esta sala. Sé el primero en reportar.</div>`;
-      return;
+    // Nombre de la sala en Minnit Chat
+    const roomName = zone.minnitRoom || `ParoHuanuco_${zone.id}`;
+    const minnitUrl = `https://minnit.chat/${roomName}?embed&web`;
+
+    if (loader) loader.style.display = "flex";
+    iframe.src = minnitUrl;
+
+    if (externalLink) {
+      externalLink.href = `https://minnit.chat/${roomName}`;
+      externalLink.title = `Abrir Chat de ${zone.name} en ventana completa`;
     }
-
-    list.forEach(msg => {
-      const msgDiv = document.createElement("div");
-      msgDiv.className = `chat-msg ${msg.isMine ? "msg-mine" : ""}`;
-      msgDiv.innerHTML = `
-        <div class="chat-msg-header">
-          <span class="chat-user">${escapeHtml(msg.user)}</span>
-          <span class="chat-time">${msg.time}</span>
-        </div>
-        <div class="chat-text">${escapeHtml(msg.text)}</div>
-      `;
-      container.appendChild(msgDiv);
-    });
-
-    // Auto-scroll al fondo
-    container.scrollTop = container.scrollHeight;
   }
 
   // =========================================================================

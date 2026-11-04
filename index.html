@@ -224,34 +224,39 @@
       </div>
     </section>
 
-    <!-- ==================== VISTA 4: CHAT COMUNITARIO ==================== -->
+    <!-- ==================== VISTA 4: CHAT COMUNITARIO (MINNIT CHAT EN VIVO) ==================== -->
     <section id="view-chat" class="view-panel">
       <div class="chat-wrapper">
-        <div class="chat-zone-tabs" id="chat-zone-tabs">
-          <!-- Pestañas para cambiar el chat de zona -->
+        <div class="chat-zone-tabs-header">
+          <div class="chat-zone-tabs" id="chat-zone-tabs">
+            <!-- Pestañas para cambiar el chat de zona inyectadas por JS -->
+          </div>
+          <div class="chat-zone-actions">
+            <a id="btn-open-minnit-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-sm" title="Abrir chat en pantalla completa">
+              <i class="fa-solid fa-up-right-from-square"></i>
+            </a>
+          </div>
         </div>
 
         <div class="chat-box-container">
           <div class="chat-banner-warning">
             <i class="fa-solid fa-circle-exclamation"></i>
-            <span>Canal ciudadano moderado. Comparte solo hechos verificados. No compartas cadenas falsas.</span>
+            <span>Chat ciudadano en tiempo real con historial público. Los mensajes son visibles para todos. No compartas cadenas falsas.</span>
           </div>
 
-          <!-- Mensajes del chat -->
-          <div class="chat-messages" id="chat-messages-container">
-            <!-- Mensajes simulados / reales -->
-          </div>
-
-          <!-- Formulario de envío -->
-          <form id="chat-form" class="chat-input-bar">
-            <input type="text" id="chat-user-name" placeholder="Tu Apodo/Nombre" maxlength="25" class="input-nickname" required>
-            <div class="input-message-group">
-              <input type="text" id="chat-message-text" placeholder="Escribe tu reporte o consulta..." maxlength="250" autocomplete="off" required>
-              <button type="submit" class="btn-send-chat" title="Enviar mensaje">
-                <i class="fa-solid fa-paper-plane"></i>
-              </button>
+          <!-- Contenedor del Iframe Minnit Chat -->
+          <div class="minnit-chat-frame-container" id="minnit-chat-frame-container">
+            <iframe
+              id="minnit-chat-iframe"
+              src="about:blank"
+              class="minnit-chat-iframe"
+              allow="camera; microphone; display-capture; clipboard-write; autoplay"
+              loading="lazy">
+            </iframe>
+            <div id="minnit-loader" class="minnit-loader">
+              <i class="fa-solid fa-spinner fa-spin"></i> Conectando al chat en vivo...
             </div>
-          </form>
+          </div>
         </div>
 
         <!-- Botón para reportar por WhatsApp oficial -->

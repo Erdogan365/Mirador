@@ -41,6 +41,8 @@ const APP_CONFIG = {
       reporter: "Móvil 01 - Fonavi",
       // Sala pública y gratuita en Jitsi Meet
       jitsiRoom: "ParoHuanuco_ZonaNorte_Oficial",
+      // Sala de chat comunitaria en Minnit (con historial en vivo)
+      minnitRoom: "ParoHuanucoNorte",
       activeStream: true,
       description: "Vía de salida a Tingo María con tránsito de mototaxis lento por bloqueo intermitente."
     },
@@ -52,6 +54,7 @@ const APP_CONFIG = {
       statusType: "bloqueo",
       reporter: "Móvil 02 - Prensa Popular",
       jitsiRoom: "ParoHuanuco_ZonaCentro_Oficial",
+      minnitRoom: "ParoHuanucoCentro",
       activeStream: true,
       description: "Comerciantes cerraron puestos en Mercado Central. Columna de manifestantes rumbo a la Plaza."
     },
@@ -63,6 +66,7 @@ const APP_CONFIG = {
       statusType: "bloqueo",
       reporter: "Móvil 03 - Pillco Marca",
       jitsiRoom: "ParoHuanuco_ZonaSur_Oficial",
+      minnitRoom: "ParoHuanucoSur",
       activeStream: true,
       description: "Puente San Sebastián y Óvalo de Cayhuayna completamente cerrados por piquetes de huelga."
     }
