@@ -20,8 +20,12 @@ document.addEventListener("DOMContentLoaded", () => {
     currentStreamId: null,
     currentPlayingStreamId: null,
     chatMessages: [],
-    myClientId: "usr_" + Math.random().toString(36).substring(2, 8)
+    myClientId: "usr_" + Math.random().toString(36).substring(2, 8),
+    tempPickerMarker: null,
+    isPickingLocationOnMap: false
   };
+
+  let switchView = function(viewName) {};
 
   // =========================================================================
   // 1. INICIALIZACIÓN
@@ -57,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tabButtons = document.querySelectorAll(".tab-btn");
     const bottomNavButtons = document.querySelectorAll(".bottom-nav-item");
 
-    function switchView(viewName) {
+    switchView = function(viewName) {
       state.currentView = viewName;
 
       // Actualizar paneles
@@ -286,6 +290,27 @@ document.addEventListener("DOMContentLoaded", () => {
     L.control.layers(baseMaps, null, { position: "topright" }).addTo(state.map);
 
     state.markersLayer = L.layerGroup().addTo(state.map);
+
+    // Evento de clic en el mapa: modo marcador o pop-up rápido para reportar incidente
+    state.map.on("click", (e) => {
+      if (state.isPickingLocationOnMap) {
+        if (typeof window.handleMapPickerClick === "function") {
+          window.handleMapPickerClick(e.latlng);
+        }
+      } else {
+        const popup = L.popup({ className: "quick-report-map-popup" })
+          .setLatLng(e.latlng)
+          .setContent(`
+            <div style="text-align:center; padding: 4px;">
+              <strong style="color:#0f172a; font-size:0.8rem; display:block; margin-bottom:5px;">📍 Punto Seleccionado</strong>
+              <button class="btn-popup-sm btn-popup-edit" style="width:100%; margin:0; cursor:pointer;" onclick="window.reportIncidentAt(${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)})">
+                <i class="fa-solid fa-circle-plus"></i> Reportar Incidente Aquí
+              </button>
+            </div>
+          `)
+          .openOn(state.map);
+      }
+    });
 
     // Renderizar los marcadores iniciales
     renderMapPoints();
@@ -1273,7 +1298,104 @@ document.addEventListener("DOMContentLoaded", () => {
   // =========================================================================
   // 7. REPORTE CIUDADANO DE INCIDENTES / ESTADO DE VÍA (SINCRONIZADO)
   // =========================================================================
-  let incidentGpsCoords = null;
+  const HUANUCO_KNOWN_PLACES = [
+    { name: "Puente Calicanto", lat: -9.9325, lng: -76.2389, zone: "centro" },
+    { name: "Óvalo de Cayhuayna", lat: -9.9575, lng: -76.2418, zone: "sur" },
+    { name: "Puente San Sebastián", lat: -9.9392, lng: -76.2447, zone: "centro" },
+    { name: "Óvalo Esteban Pavletich (Fonavi II)", lat: -9.9142, lng: -76.2341, zone: "norte" },
+    { name: "Plaza de Armas de Huánuco", lat: -9.9306, lng: -76.2422, zone: "centro" },
+    { name: "Mercado Modelo (Jr. Huallayco)", lat: -9.9287, lng: -76.2405, zone: "centro" },
+    { name: "Vía Colectora (Pillco Marca)", lat: -9.9520, lng: -76.2370, zone: "sur" },
+    { name: "Puente Tingo / Las Moras", lat: -9.9220, lng: -76.2480, zone: "centro" },
+    { name: "Carretera Central - Salida a Ambo / Lima", lat: -9.9650, lng: -76.2450, zone: "sur" },
+    { name: "Carretera Central - Salida a Tingo María", lat: -9.9050, lng: -76.2300, zone: "norte" },
+    { name: "UNHEVAL (Puerta Principal)", lat: -9.9555, lng: -76.2485, zone: "sur" },
+    { name: "UDH (Campus La Esperanza)", lat: -9.9020, lng: -76.2250, zone: "norte" },
+    { name: "Alameda de la República", lat: -9.9340, lng: -76.2415, zone: "centro" },
+    { name: "Malecón Daniel Alomía Robles", lat: -9.9350, lng: -76.2410, zone: "centro" },
+    { name: "Puente Señor de Burgos (Amarilis)", lat: -9.9270, lng: -76.2330, zone: "centro" },
+    { name: "Puente Huallaga (Salida Amarilis)", lat: -9.9200, lng: -76.2310, zone: "norte" }
+  ];
+
+  function findNearestKnownPlace(lat, lng) {
+    let nearest = null;
+    let minDist = Infinity;
+    HUANUCO_KNOWN_PLACES.forEach(place => {
+      const dLat = place.lat - lat;
+      const dLng = place.lng - lng;
+      const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = { place, distance: dist };
+      }
+    });
+    return nearest;
+  }
+
+  function autoAssignZoneByCoords(lat, lng) {
+    const selectZone = document.getElementById("incident-select-zone");
+    if (!selectZone) return;
+    if (lat < -9.945) {
+      selectZone.value = "sur";
+    } else if (lat > -9.920) {
+      selectZone.value = "norte";
+    } else {
+      selectZone.value = "centro";
+    }
+  }
+
+  function updateCoordPreview(lat, lng, label = null) {
+    const box = document.getElementById("incident-coord-preview");
+    const text = document.getElementById("incident-coord-text");
+    const btnClear = document.getElementById("btn-clear-coords");
+    if (!box || !text) return;
+
+    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+      box.classList.add("coord-locked");
+      const labelStr = label ? ` (${label})` : "";
+      text.innerHTML = `<strong>Ubicación fijada:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}${labelStr}`;
+      if (btnClear) btnClear.classList.remove("hidden");
+    } else {
+      box.classList.remove("coord-locked");
+      text.textContent = "Selecciona un lugar o márcalo en el mapa";
+      if (btnClear) btnClear.classList.add("hidden");
+    }
+  }
+
+  function placeTempPickerMarker(lat, lng) {
+    if (!state.map) return;
+    if (state.tempPickerMarker) {
+      state.tempPickerMarker.setLatLng([lat, lng]);
+    } else {
+      state.tempPickerMarker = L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: "temp-picker-marker",
+          html: '<div class="picker-pin"><i class="fa-solid fa-location-dot"></i></div>',
+          iconSize: [38, 38],
+          iconAnchor: [19, 38]
+        }),
+        draggable: true
+      }).addTo(state.map);
+
+      state.tempPickerMarker.on("dragend", (e) => {
+        const pos = e.target.getLatLng();
+        const latInput = document.getElementById("incident-input-lat");
+        const lngInput = document.getElementById("incident-input-lng");
+        if (latInput) latInput.value = pos.lat.toFixed(6);
+        if (lngInput) lngInput.value = pos.lng.toFixed(6);
+        autoAssignZoneByCoords(pos.lat, pos.lng);
+        const nearest = findNearestKnownPlace(pos.lat, pos.lng);
+        updateCoordPreview(pos.lat, pos.lng, nearest && nearest.distance < 0.003 ? nearest.place.name : null);
+      });
+    }
+  }
+
+  function clearTempPickerMarker() {
+    if (state.tempPickerMarker && state.map) {
+      state.map.removeLayer(state.tempPickerMarker);
+      state.tempPickerMarker = null;
+    }
+  }
 
   function initIncidentReporting() {
     const btnOpen = document.getElementById("btn-open-incident-modal");
@@ -1287,8 +1409,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputAuthor = document.getElementById("incident-input-author");
     const hiddenId = document.getElementById("incident-edit-id");
     const btnSubmit = document.getElementById("btn-submit-incident");
+    const btnPickMap = document.getElementById("btn-incident-pick-on-map");
+    const btnCancelPicker = document.getElementById("btn-cancel-map-picker");
+    const btnClearCoords = document.getElementById("btn-clear-coords");
     const btnGps = document.getElementById("btn-incident-use-gps");
-    const gpsStatus = document.getElementById("incident-gps-status");
+    const latInput = document.getElementById("incident-input-lat");
+    const lngInput = document.getElementById("incident-input-lng");
     const radioStatus = document.querySelectorAll('input[name="incident_status"]');
 
     if (btnOpen) {
@@ -1300,18 +1426,20 @@ document.addEventListener("DOMContentLoaded", () => {
         form?.reset();
         document.querySelectorAll("#incident-modal .radio-card").forEach(c => c.classList.remove("active"));
         document.getElementById("card-status-bloqueo")?.classList.add("active");
-        incidentGpsCoords = null;
-        if (btnGps) {
-          btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
-          btnGps.style.background = "";
-        }
-        if (gpsStatus) gpsStatus.textContent = "";
+        if (latInput) latInput.value = "";
+        if (lngInput) lngInput.value = "";
+        updateCoordPreview(null, null);
+        clearTempPickerMarker();
         modal?.classList.remove("hidden");
         setTimeout(() => inputTitle?.focus(), 100);
       });
     }
 
-    const closeModal = () => modal?.classList.add("hidden");
+    const closeModal = () => {
+      modal?.classList.add("hidden");
+      clearTempPickerMarker();
+    };
+
     if (btnClose) btnClose.addEventListener("click", closeModal);
     if (btnCancel) btnCancel.addEventListener("click", closeModal);
     if (modal) {
@@ -1327,33 +1455,111 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
 
+    // Marcar punto directamente en el mapa
+    if (btnPickMap) {
+      btnPickMap.addEventListener("click", () => {
+        state.isPickingLocationOnMap = true;
+        modal?.classList.add("hidden");
+        switchView("mapa");
+
+        const banner = document.getElementById("map-picker-banner");
+        if (banner) banner.classList.remove("hidden");
+        document.body.classList.add("map-picking-active");
+
+        const curLat = parseFloat(latInput?.value);
+        const curLng = parseFloat(lngInput?.value);
+        if (!isNaN(curLat) && !isNaN(curLng) && state.map) {
+          state.map.setView([curLat, curLng], 16);
+          placeTempPickerMarker(curLat, curLng);
+        } else if (state.map) {
+          state.map.setView(APP_CONFIG.mapCenter, 15);
+        }
+      });
+    }
+
+    if (btnCancelPicker) {
+      btnCancelPicker.addEventListener("click", () => {
+        state.isPickingLocationOnMap = false;
+        document.body.classList.remove("map-picking-active");
+        const banner = document.getElementById("map-picker-banner");
+        if (banner) banner.classList.add("hidden");
+        modal?.classList.remove("hidden");
+      });
+    }
+
+    if (btnClearCoords) {
+      btnClearCoords.addEventListener("click", () => {
+        if (latInput) latInput.value = "";
+        if (lngInput) lngInput.value = "";
+        clearTempPickerMarker();
+        updateCoordPreview(null, null);
+      });
+    }
+
+    // Autocompletado inteligente con lista de puntos críticos de Huánuco
+    if (inputTitle) {
+      inputTitle.addEventListener("input", () => {
+        const val = inputTitle.value.trim().toLowerCase();
+        if (!val) return;
+        const match = HUANUCO_KNOWN_PLACES.find(p => p.name.toLowerCase() === val || (val.length > 5 && p.name.toLowerCase().includes(val)));
+        if (match) {
+          if (latInput) latInput.value = match.lat;
+          if (lngInput) lngInput.value = match.lng;
+          if (selectZone) selectZone.value = match.zone;
+          placeTempPickerMarker(match.lat, match.lng);
+          updateCoordPreview(match.lat, match.lng, match.name);
+        }
+      });
+    }
+
+    // Geolocalización del dispositivo con verificación de límites de Huánuco
     if (btnGps) {
       btnGps.addEventListener("click", () => {
         if (!navigator.geolocation) {
-          alert("Tu navegador no soporta geolocalización.");
+          alert("Tu navegador o dispositivo no soporta geolocalización.");
           return;
         }
-        btnGps.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo ubicación GPS...`;
+        const origHtml = btnGps.innerHTML;
+        btnGps.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo GPS...`;
+        btnGps.disabled = true;
+
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            incidentGpsCoords = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude
-            };
-            btnGps.innerHTML = `<i class="fa-solid fa-circle-check"></i> Ubicación GPS fijada`;
-            btnGps.style.background = "#10b981";
-            if (gpsStatus) gpsStatus.textContent = `Coordenadas: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+            btnGps.innerHTML = origHtml;
+            btnGps.disabled = false;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            // Validación de coordenadas para el departamento de Huánuco
+            const inHuanuco = (lat >= -10.3 && lat <= -9.6 && lng >= -76.6 && lng <= -75.9);
+            if (!inHuanuco) {
+              alert(`⚠️ Tu dispositivo/red reporta coordenadas (${lat.toFixed(4)}, ${lng.toFixed(4)}) fuera de Huánuco (posible conexión de internet con IP de Lima).\n\nTe recomendamos pulsar "Marcar en el mapa" para ubicar el incidente con exactitud sobre la calle correspondiente.`);
+              return;
+            }
+
+            if (latInput) latInput.value = lat.toFixed(6);
+            if (lngInput) lngInput.value = lng.toFixed(6);
+
+            autoAssignZoneByCoords(lat, lng);
+            placeTempPickerMarker(lat, lng);
+            updateCoordPreview(lat, lng, "GPS Actual");
+
+            if (state.map) {
+              state.map.setView([lat, lng], 16);
+            }
           },
           (err) => {
-            console.warn("Error GPS incidente:", err);
-            btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
-            if (gpsStatus) gpsStatus.textContent = "No se pudo obtener GPS (permiso denegado)";
+            btnGps.innerHTML = origHtml;
+            btnGps.disabled = false;
+            console.warn("GPS incidente error:", err);
+            alert("No se pudo obtener la señal GPS de tu dispositivo.\n\nPuedes marcar el punto exacto tocando 'Marcar en el mapa'.");
           },
-          { enableHighAccuracy: true, timeout: 8000 }
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
         );
       });
     }
 
+    // Envío del formulario
     if (form) {
       form.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -1373,6 +1579,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const timeNow = getCurrentTimeFormatted();
 
+        // Determinar coordenadas exactas
+        const rawLat = parseFloat(latInput?.value);
+        const rawLng = parseFloat(lngInput?.value);
+
+        let finalLat, finalLng;
+        if (!isNaN(rawLat) && !isNaN(rawLng)) {
+          finalLat = rawLat;
+          finalLng = rawLng;
+        } else {
+          // Buscar coincidencia en lugares conocidos de Huánuco
+          const match = HUANUCO_KNOWN_PLACES.find(p => title.toLowerCase().includes(p.name.toLowerCase()));
+          if (match) {
+            finalLat = match.lat;
+            finalLng = match.lng;
+          } else {
+            // Centro de la zona como último recurso sin jitter arbitrario
+            const zoneCenters = {
+              centro: { lat: -9.9306, lng: -76.2422 },
+              sur: { lat: -9.9575, lng: -76.2418 },
+              norte: { lat: -9.9142, lng: -76.2341 }
+            };
+            const c = zoneCenters[zoneId] || zoneCenters.centro;
+            finalLat = c.lat;
+            finalLng = c.lng;
+          }
+        }
+
         if (editingId) {
           // Edición de reporte existente
           const existingIndex = state.mapPoints.findIndex(p => p.id === editingId);
@@ -1383,28 +1616,17 @@ document.addEventListener("DOMContentLoaded", () => {
             state.mapPoints[existingIndex].statusLabel = statusLabel;
             state.mapPoints[existingIndex].description = `${desc} (Actualizado por: ${author})`;
             state.mapPoints[existingIndex].time = timeNow;
-            if (incidentGpsCoords) {
-              state.mapPoints[existingIndex].lat = incidentGpsCoords.lat;
-              state.mapPoints[existingIndex].lng = incidentGpsCoords.lng;
-            }
+            state.mapPoints[existingIndex].lat = finalLat;
+            state.mapPoints[existingIndex].lng = finalLng;
           }
         } else {
-          // Creación de nuevo reporte
-          const defaultCoords = {
-            centro: { lat: -9.9306, lng: -76.2422 },
-            norte: { lat: -9.9142, lng: -76.2341 },
-            sur: { lat: -9.9575, lng: -76.2418 }
-          };
-          const baseCoords = incidentGpsCoords || defaultCoords[zoneId] || { lat: -9.9306, lng: -76.2422 };
-          const jitterLat = (Math.random() - 0.5) * 0.003;
-          const jitterLng = (Math.random() - 0.5) * 0.003;
-
+          // Creación de nuevo reporte georreferenciado
           const newPoint = {
             id: "pt-" + Date.now(),
             title: title,
             zoneId: zoneId,
-            lat: baseCoords.lat + (incidentGpsCoords ? 0 : jitterLat),
-            lng: baseCoords.lng + (incidentGpsCoords ? 0 : jitterLng),
+            lat: finalLat,
+            lng: finalLng,
             status: status,
             statusLabel: statusLabel,
             time: timeNow,
@@ -1436,15 +1658,81 @@ document.addEventListener("DOMContentLoaded", () => {
         closeModal();
         form.reset();
         if (hiddenId) hiddenId.value = "";
-        incidentGpsCoords = null;
-        if (btnGps) {
-          btnGps.innerHTML = `<i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta`;
-          btnGps.style.background = "";
+        if (latInput) latInput.value = "";
+        if (lngInput) lngInput.value = "";
+        updateCoordPreview(null, null);
+        clearTempPickerMarker();
+
+        // Si estamos en la vista de mapa, volar al punto y abrir el popup
+        switchView("mapa");
+        if (state.map) {
+          state.map.flyTo([finalLat, finalLng], 16, { animate: true, duration: 1 });
+          setTimeout(() => {
+            state.markersLayer?.eachLayer(layer => {
+              if (layer.getLatLng && 
+                  Math.abs(layer.getLatLng().lat - finalLat) < 0.0002 && 
+                  Math.abs(layer.getLatLng().lng - finalLng) < 0.0002) {
+                layer.openPopup();
+              }
+            });
+          }, 1100);
         }
-        if (gpsStatus) gpsStatus.textContent = "";
       });
     }
   }
+
+  // Clic en el mapa cuando el modo marcador está activo
+  window.handleMapPickerClick = function(latlng) {
+    state.isPickingLocationOnMap = false;
+    document.body.classList.remove("map-picking-active");
+
+    const banner = document.getElementById("map-picker-banner");
+    if (banner) banner.classList.add("hidden");
+
+    placeTempPickerMarker(latlng.lat, latlng.lng);
+
+    const latInput = document.getElementById("incident-input-lat");
+    const lngInput = document.getElementById("incident-input-lng");
+    if (latInput) latInput.value = latlng.lat.toFixed(6);
+    if (lngInput) lngInput.value = latlng.lng.toFixed(6);
+
+    autoAssignZoneByCoords(latlng.lat, latlng.lng);
+
+    const nearest = findNearestKnownPlace(latlng.lat, latlng.lng);
+    const titleInput = document.getElementById("incident-input-title");
+    if (nearest && nearest.distance < 0.003 && titleInput && !titleInput.value.trim()) {
+      titleInput.value = nearest.place.name;
+    }
+
+    updateCoordPreview(latlng.lat, latlng.lng, nearest && nearest.distance < 0.003 ? nearest.place.name : null);
+
+    const modal = document.getElementById("incident-modal");
+    if (modal) modal.classList.remove("hidden");
+  };
+
+  // Reportar directamente desde un punto clickeado en el mapa
+  window.reportIncidentAt = function(lat, lng) {
+    if (state.map) state.map.closePopup();
+    const btnOpen = document.getElementById("btn-open-incident-modal");
+    if (btnOpen) btnOpen.click();
+
+    const latInput = document.getElementById("incident-input-lat");
+    const lngInput = document.getElementById("incident-input-lng");
+    if (latInput) latInput.value = lat;
+    if (lngInput) lngInput.value = lng;
+
+    autoAssignZoneByCoords(lat, lng);
+    placeTempPickerMarker(lat, lng);
+
+    const nearest = findNearestKnownPlace(lat, lng);
+    const titleInput = document.getElementById("incident-input-title");
+    if (nearest && nearest.distance < 0.003 && titleInput) {
+      titleInput.value = nearest.place.name;
+      updateCoordPreview(lat, lng, nearest.place.name);
+    } else {
+      updateCoordPreview(lat, lng, "Punto marcado");
+    }
+  };
 
   // Funciones globales expuestas para editar y retirar incidentes desde popups o tarjetas
   window.editIncidentById = function(pointId) {
@@ -1459,6 +1747,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputAuthor = document.getElementById("incident-input-author");
     const hiddenId = document.getElementById("incident-edit-id");
     const btnSubmit = document.getElementById("btn-submit-incident");
+    const latInput = document.getElementById("incident-input-lat");
+    const lngInput = document.getElementById("incident-input-lng");
 
     if (modalTitle) modalTitle.innerHTML = `<i class="fa-solid fa-pen-to-square"></i> Editar Incidente / Estado de Vía`;
     if (inputTitle) inputTitle.value = pt.title || "";
@@ -1466,7 +1756,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (inputDesc) inputDesc.value = pt.description ? pt.description.replace(/\s*\((Reportado|Actualizado) por:.*?\)/, "") : "";
     if (inputAuthor) inputAuthor.value = pt.author || "";
     if (hiddenId) hiddenId.value = pt.id;
+    if (latInput) latInput.value = pt.lat;
+    if (lngInput) lngInput.value = pt.lng;
     if (btnSubmit) btnSubmit.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Guardar Cambios en Vivo`;
+
+    updateCoordPreview(pt.lat, pt.lng, pt.title);
+    placeTempPickerMarker(pt.lat, pt.lng);
 
     document.querySelectorAll("#incident-modal input[name=\"incident_status\"]").forEach(r => {
       r.checked = (r.value === pt.status);
@@ -1482,6 +1777,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (confirm(`¿Deseas retirar el reporte de "${pt.title}"?\nLa vía quedará marcada como despejada y se actualizará para todos.`)) {
       state.mapPoints = state.mapPoints.filter(p => p.id !== pointId);
+      clearTempPickerMarker();
       try {
         localStorage.setItem("monitor_map_points_v2", JSON.stringify(state.mapPoints));
       } catch (e) {}

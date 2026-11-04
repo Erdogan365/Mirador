@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/styles.css?v=12.0">
+  <link rel="stylesheet" href="css/styles.css?v=13.0">
 </head>
 <body class="theme-dark">
 
@@ -114,6 +114,20 @@
       <!-- Contenedor del Mapa Leaflet -->
       <div class="map-wrapper">
         <div id="map" class="map-canvas"></div>
+
+        <!-- Banner Flotante para Marcar Ubicación en el Mapa -->
+        <div id="map-picker-banner" class="map-picker-banner hidden">
+          <div class="map-picker-content">
+            <i class="fa-solid fa-hand-pointer fa-bounce"></i>
+            <div class="map-picker-text">
+              <strong>Toca el mapa en el punto exacto</strong>
+              <span>Pulsa sobre la calle, puente u óvalo para situar el incidente</span>
+            </div>
+          </div>
+          <button type="button" id="btn-cancel-map-picker" class="btn-picker-cancel">
+            <i class="fa-solid fa-xmark"></i> Cancelar
+          </button>
+        </div>
 
         <!-- Leyenda flotante minimizable -->
         <div class="map-floating-legend" id="map-legend">
@@ -333,7 +347,46 @@
         <input type="hidden" id="incident-edit-id" value="">
         <div class="form-group">
           <label><i class="fa-solid fa-location-dot"></i> Lugar o Punto:</label>
-          <input type="text" id="incident-input-title" placeholder="Ej. Puente Calicanto, Óvalo Pavletich, Vía Colectora..." required maxlength="60">
+          <input type="text" id="incident-input-title" placeholder="Ej. Puente Calicanto, Óvalo Pavletich, Vía Colectora..." required maxlength="60" list="huanuco-critical-points" autocomplete="off">
+          <datalist id="huanuco-critical-points">
+            <option value="Puente Calicanto">Puente Calicanto (Centro)</option>
+            <option value="Óvalo de Cayhuayna">Óvalo de Cayhuayna (Sur)</option>
+            <option value="Puente San Sebastián">Puente San Sebastián (Centro)</option>
+            <option value="Óvalo Esteban Pavletich (Fonavi II)">Óvalo Pavletich / Fonavi II (Norte)</option>
+            <option value="Plaza de Armas de Huánuco">Plaza de Armas de Huánuco (Centro)</option>
+            <option value="Mercado Modelo (Jr. Huallayco)">Mercado Modelo / Jr. Huallayco (Centro)</option>
+            <option value="Vía Colectora (Pillco Marca)">Vía Colectora Pillco Marca (Sur)</option>
+            <option value="Puente Tingo / Las Moras">Puente Tingo / Las Moras (Centro)</option>
+            <option value="Carretera Central - Salida a Ambo / Lima">Carretera Central Sur (Salida a Lima)</option>
+            <option value="Carretera Central - Salida a Tingo María">Carretera Central Norte (Salida a Tingo María)</option>
+            <option value="UNHEVAL (Puerta Principal)">UNHEVAL Cayhuayna (Sur)</option>
+            <option value="UDH (Campus La Esperanza)">UDH La Esperanza (Norte)</option>
+            <option value="Alameda de la República">Alameda de la República (Centro)</option>
+            <option value="Malecón Daniel Alomía Robles">Malecón Alomía Robles (Centro)</option>
+            <option value="Puente Señor de Burgos (Amarilis)">Puente Señor de Burgos (Amarilis)</option>
+            <option value="Puente Huallaga (Salida Amarilis)">Puente Huallaga (Amarilis / Norte)</option>
+          </datalist>
+        </div>
+
+        <div class="form-group">
+          <label><i class="fa-solid fa-crosshairs"></i> Ubicación en el Mapa:</label>
+          <div class="geo-picker-actions">
+            <button type="button" id="btn-incident-pick-on-map" class="btn-geo-action btn-geo-map">
+              <i class="fa-solid fa-map-pin"></i> Marcar en el mapa
+            </button>
+            <button type="button" id="btn-incident-use-gps" class="btn-geo-action btn-geo-gps">
+              <i class="fa-solid fa-location-crosshairs"></i> Usar mi GPS
+            </button>
+          </div>
+          <div id="incident-coord-preview" class="coord-preview-box">
+            <div class="coord-status-left">
+              <i class="fa-solid fa-location-dot" id="coord-preview-icon"></i>
+              <span id="incident-coord-text">Selecciona un lugar o márcalo en el mapa</span>
+            </div>
+            <button type="button" id="btn-clear-coords" class="btn-coord-clear hidden" title="Limpiar ubicación fijada">&times;</button>
+          </div>
+          <input type="hidden" id="incident-input-lat" value="">
+          <input type="hidden" id="incident-input-lng" value="">
         </div>
 
         <div class="form-group">
@@ -380,13 +433,6 @@
         <div class="form-group">
           <label><i class="fa-solid fa-user"></i> Tu nombre o medio (opcional):</label>
           <input type="text" id="incident-input-author" placeholder="Ej. Vecino de Cayhuayna, Conductor..." maxlength="35">
-        </div>
-
-        <div class="form-group">
-          <button type="button" id="btn-incident-use-gps" class="btn-sm btn-accent" style="justify-content:center;">
-            <i class="fa-solid fa-crosshairs"></i> Adjuntar mi ubicación GPS exacta
-          </button>
-          <span id="incident-gps-status" style="font-size:0.75rem; color:#94a3b8; text-align:center;"></span>
         </div>
 
         <div class="modal-footer">
@@ -494,8 +540,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 
   <!-- Scripts de la Aplicación con Cache Busting para Celulares -->
-  <script src="js/data.js?v=12.0"></script>
-  <script src="js/app.js?v=12.0"></script>
+  <script src="js/data.js?v=13.0"></script>
+  <script src="js/app.js?v=13.0"></script>
 </body>
 </html>
 
