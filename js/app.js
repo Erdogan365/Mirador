@@ -28,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     initNavigation();
     initAlertTicker();
-    initZoneButtons();
+    initCitizenStreams();
     initMap();
     initLiveFeed();
     initChat();
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
           state.map.invalidateSize();
         }, 150);
       } else if (viewName === "envivo") {
-        loadZoneStream(state.currentZoneId);
+        renderCitizenStreamsList();
       }
     }
 
@@ -494,48 +494,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // 5. CÁMARAS Y TRANSMISIÓN EN VIVO
+  // 5. CÁMARAS Y TRANSMISIONES CIUDADANAS (DINÁMICO)
   // =========================================================================
-  function initZoneButtons() {
-    const container = document.getElementById("zone-buttons-container");
-    if (!container) return;
+  function initCitizenStreams() {
+    loadSavedStreams();
+    renderCitizenStreamsList();
+    initStreamCreationModal();
 
-    container.innerHTML = "";
-    APP_CONFIG.zones.forEach(zone => {
-      const btn = document.createElement("button");
-      btn.className = `btn-zone-card ${zone.id === state.currentZoneId ? "active" : ""}`;
-      btn.dataset.zoneId = zone.id;
-
-      let statusDot = "🔴";
-      if (zone.statusType === "restringido") statusDot = "🟡";
-      if (zone.statusType === "libre") statusDot = "🟢";
-
-      // Solo mostrar "EN VIVO" si realmente tiene transmisión activa
-      const liveBadge = zone.activeStream
-        ? `<span class="zone-live-tag"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>`
-        : `<span class="zone-offline-tag"><i class="fa-regular fa-circle"></i> Fuera de línea</span>`;
-
-      btn.innerHTML = `
-        <div class="zone-card-title">
-          <span>${zone.name}</span>
-          ${liveBadge}
-        </div>
-        <div class="zone-card-sub">${zone.sector}</div>
-        <div style="font-size:0.7rem; font-weight:700; color:#cbd5e1; margin-top:2px;">
-          ${statusDot} ${zone.status}
-        </div>
-      `;
-
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".btn-zone-card").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        loadZoneStream(zone.id);
-      });
-
-      container.appendChild(btn);
-    });
-
-    // Control de pantalla completa
+    // Controles de pantalla completa
     const btnFullscreen = document.getElementById("btn-fullscreen-stream");
     const streamContainer = document.getElementById("stream-container");
     if (btnFullscreen && streamContainer) {
@@ -548,164 +514,151 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Botón de recarga de sala
-    const btnReload = document.getElementById("btn-reload-stream");
-    if (btnReload) {
-      btnReload.addEventListener("click", () => loadZoneStream(state.currentZoneId, true));
+    // Botones para abrir modal de transmisión
+    const btnStart = document.getElementById("btn-start-stream");
+    const btnTrigger = document.getElementById("btn-trigger-stream-modal");
+    if (btnStart) btnStart.addEventListener("click", openStreamCreatorModal);
+    if (btnTrigger) btnTrigger.addEventListener("click", openStreamCreatorModal);
+
+    // Botón finalizar mi transmisión
+    const btnEnd = document.getElementById("btn-end-stream");
+    if (btnEnd) {
+      btnEnd.addEventListener("click", endMyStream);
     }
   }
 
-  // Cargar stream (Jitsi, YouTube, Facebook o Placeholder) por Zona
-  function loadZoneStream(zoneId, forceReload = false) {
-    const zone = APP_CONFIG.zones.find(z => z.id === zoneId);
-    if (!zone) return;
-
-    state.currentZoneId = zoneId;
-
-    // Actualizar encabezados de la tarjeta
-    document.getElementById("current-zone-name").textContent = zone.name.toUpperCase();
-    const statusPill = document.getElementById("current-zone-status-pill");
-    statusPill.textContent = zone.status;
-    statusPill.className = `stream-meta-status tag-${zone.statusType}`;
-    document.getElementById("current-zone-reporter").textContent = zone.reporter;
-
-    const jitsiContainer = document.getElementById("jitsi-meet-holder");
-    const placeholder = document.getElementById("stream-placeholder");
-    const externalBtn = document.getElementById("btn-open-jitsi-external");
-
-    // Si la zona NO tiene transmisión activa real, mostrar pantalla de espera limpia
-    if (!zone.activeStream) {
-      jitsiContainer.innerHTML = "";
-      if (placeholder) {
-        placeholder.classList.remove("hidden");
-        placeholder.innerHTML = `
-          <div class="placeholder-icon"><i class="fa-solid fa-satellite-dish"></i></div>
-          <h4>Sin transmisión activa en ${zone.name}</h4>
-          <p>El reportero de este sector aún no ha encendido su cámara o la señal fue suspendida momentáneamente.</p>
-          <span style="font-size:0.75rem; color:#94a3b8; margin-top:6px;"><i class="fa-solid fa-info-circle"></i> Consulta las otras zonas o el Minuto a Minuto.</span>
-        `;
+  function loadSavedStreams() {
+    try {
+      const saved = localStorage.getItem("monitor_citizen_streams");
+      if (saved) {
+        state.streams = JSON.parse(saved);
+      } else {
+        state.streams = Array.isArray(APP_CONFIG.citizenStreams) ? [...APP_CONFIG.citizenStreams] : [];
       }
-      if (externalBtn) externalBtn.style.display = "none";
-      renderZoneContextFeed(zoneId);
+      state.myActiveStreamId = localStorage.getItem("monitor_my_stream_id") || null;
+    } catch (e) {
+      state.streams = [];
+    }
+  }
+
+  function saveStreams() {
+    try {
+      localStorage.setItem("monitor_citizen_streams", JSON.stringify(state.streams));
+    } catch (e) { }
+  }
+
+  function renderCitizenStreamsList() {
+    const listContainer = document.getElementById("active-streams-list");
+    const streamsBar = document.getElementById("active-streams-bar");
+    const placeholder = document.getElementById("no-streams-placeholder");
+    const mediaHolder = document.getElementById("stream-media-holder");
+    const streamCard = document.getElementById("stream-card-wrapper");
+
+    if (!listContainer) return;
+    listContainer.innerHTML = "";
+
+    // Si NO hay transmisiones activas
+    if (!state.streams || state.streams.length === 0) {
+      if (streamsBar) streamsBar.style.display = "none";
+      if (placeholder) placeholder.classList.remove("hidden");
+      if (mediaHolder) mediaHolder.innerHTML = "";
+      document.getElementById("current-stream-title").textContent = "SIN SEÑAL EN VIVO";
+      document.getElementById("current-stream-location").textContent = "Esperando señal ciudadana";
+      document.getElementById("current-stream-author").textContent = "--";
+      document.getElementById("current-stream-time").textContent = "";
+      document.getElementById("btn-open-stream-external").style.display = "none";
+      document.getElementById("btn-end-stream").classList.add("hidden");
       return;
     }
 
-    // Si tiene transmisión activa
+    // Si hay transmisiones creadas por la gente
+    if (streamsBar) streamsBar.style.display = "block";
+    if (placeholder) placeholder.classList.add("hidden");
+
+    state.streams.forEach((stream, index) => {
+      const btn = document.createElement("button");
+      const isActive = state.currentStreamId === stream.id || (!state.currentStreamId && index === 0);
+      btn.className = `btn-stream-pill ${isActive ? "active" : ""}`;
+      btn.dataset.streamId = stream.id;
+
+      btn.innerHTML = `
+        <span class="stream-pill-live"><i class="fa-solid fa-circle live-blink"></i> EN VIVO</span>
+        <span class="stream-pill-title">${escapeHtml(stream.location)}</span>
+        <span class="stream-pill-author">por ${escapeHtml(stream.author || "Vecino")}</span>
+      `;
+
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".btn-stream-pill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        playCitizenStream(stream.id);
+      });
+
+      listContainer.appendChild(btn);
+    });
+
+    // Reproducir la primera si no hay una seleccionada
+    const targetId = state.currentStreamId || state.streams[0].id;
+    playCitizenStream(targetId);
+  }
+
+  function playCitizenStream(streamId) {
+    const stream = state.streams.find(s => s.id === streamId);
+    if (!stream) return;
+
+    state.currentStreamId = streamId;
+
+    document.getElementById("current-stream-title").textContent = stream.location.toUpperCase();
+    document.getElementById("current-stream-location").textContent = `📍 ${stream.location}`;
+    document.getElementById("current-stream-author").textContent = stream.author || "Ciudadano en el punto";
+    document.getElementById("current-stream-time").textContent = `• Iniciado: ${stream.time}`;
+
+    const externalBtn = document.getElementById("btn-open-stream-external");
+    const mediaHolder = document.getElementById("stream-media-holder");
+    const placeholder = document.getElementById("no-streams-placeholder");
+    const btnEnd = document.getElementById("btn-end-stream");
+
     if (placeholder) placeholder.classList.add("hidden");
     if (externalBtn) externalBtn.style.display = "inline-flex";
 
-    // Actualizar enlace de app externa
-    const isYouTube = zone.streamType === "youtube" || (zone.streamUrl && zone.streamUrl.includes("youtu"));
-    const isFacebook = zone.streamType === "facebook" || (zone.streamUrl && zone.streamUrl.includes("facebook.com"));
-
-    if (isYouTube) {
-      externalBtn.href = zone.streamUrl;
-      externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
-      embedYouTubeLive(jitsiContainer, zone.streamUrl);
-    } else if (isFacebook) {
-      externalBtn.href = zone.streamUrl;
-      externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
-      embedFacebookLive(jitsiContainer, zone.streamUrl);
+    // Mostrar botón de finalizar si es el creador
+    if (state.myActiveStreamId === stream.id) {
+      btnEnd.classList.remove("hidden");
     } else {
-      // Jitsi Meet
-      const jitsiUrl = zone.streamUrl || `https://meet.jit.si/${zone.jitsiRoom}`;
-      externalBtn.href = jitsiUrl;
-      externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> App Jitsi`;
-      embedJitsiStream(jitsiContainer, zone, forceReload);
+      btnEnd.classList.add("hidden");
     }
 
-    // Renderizar noticias contextuales de la zona
-    renderZoneContextFeed(zoneId);
-  }
+    mediaHolder.innerHTML = "";
 
-  function embedYouTubeLive(container, url) {
-    container.innerHTML = "";
-    // Extraer ID de video si es enlace estándar
-    let videoId = "";
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    if (match && match[2].length === 11) {
-      videoId = match[2];
-    }
-    const embedSrc = videoId 
-      ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0` 
-      : url;
-
-    const iframe = document.createElement("iframe");
-    iframe.src = embedSrc;
-    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-    iframe.allowFullscreen = true;
-    iframe.style.width = "100%";
-    iframe.style.height = "100%";
-    iframe.style.border = "none";
-    container.appendChild(iframe);
-  }
-
-  function embedFacebookLive(container, url) {
-    container.innerHTML = "";
-    const encodedUrl = encodeURIComponent(url);
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://www.facebook.com/plugins/video.php?href=${encodedUrl}&show_text=false&autoplay=true`;
-    iframe.allow = "autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share";
-    iframe.allowFullscreen = true;
-    iframe.style.width = "100%";
-    iframe.style.height = "100%";
-    iframe.style.border = "none";
-    container.appendChild(iframe);
-  }
-
-  function embedJitsiStream(container, zone, forceReload) {
-    if (state.currentRoom === zone.jitsiRoom && !forceReload) {
-      return;
-    }
-
-    state.currentRoom = zone.jitsiRoom;
-    container.innerHTML = "";
-
-    if (state.jitsiApi) {
-      try { state.jitsiApi.dispose(); } catch (e) { }
-      state.jitsiApi = null;
-    }
-
-    if (typeof JitsiMeetExternalAPI !== "undefined") {
-      try {
-        const domain = "meet.jit.si";
-        const options = {
-          roomName: zone.jitsiRoom,
-          parentNode: container,
-          width: "100%",
-          height: "100%",
-          userInfo: {
-            displayName: "Espectador Ciudadano"
-          },
-          configOverwrite: {
-            startWithAudioMuted: true,
-            startWithVideoMuted: true,
-            prejoinConfig: { enabled: false },
-            prejoinPageEnabled: false,
-            disableDeepLinking: true,
-            disableInviteFunctions: true,
-            toolbarButtons: [
-              'fullscreen', 'tileview', 'settings'
-            ]
-          },
-          interfaceConfigOverwrite: {
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_WATERMARK_FOR_GUESTS: false,
-            TOOLBAR_ALWAYS_VISIBLE: false
-          }
-        };
-
-        state.jitsiApi = new JitsiMeetExternalAPI(domain, options);
-      } catch (err) {
-        useIframeFallback(container, zone.jitsiRoom);
+    // Tipo de Transmisión
+    if (stream.type === "social") {
+      externalBtn.href = stream.url;
+      if (stream.url.includes("youtu")) {
+        externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
+        embedYouTubeLive(mediaHolder, stream.url);
+      } else if (stream.url.includes("facebook")) {
+        externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
+        embedFacebookLive(mediaHolder, stream.url);
+      } else {
+        externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Abrir Enlace`;
+        mediaHolder.innerHTML = `<div class="stream-generic-box">
+          <h4>Transmisión Externa</h4>
+          <p>Esta transmisión se está emitiendo en vivo a través de redes sociales.</p>
+          <a href="${stream.url}" target="_blank" rel="noopener noreferrer" class="btn-primary">
+            <i class="fa-solid fa-up-right-from-square"></i> Ver Directo en Plataforma
+          </a>
+        </div>`;
       }
     } else {
-      useIframeFallback(container, zone.jitsiRoom);
+      // Jitsi Meet (Cámara directa del reportero)
+      const jitsiUrl = `https://meet.jit.si/${stream.room}`;
+      externalBtn.href = jitsiUrl;
+      externalBtn.innerHTML = `<i class="fa-solid fa-video"></i> Abrir en App Jitsi`;
+      embedJitsiViewer(mediaHolder, stream.room);
     }
   }
 
-  function useIframeFallback(container, roomName) {
+  function embedJitsiViewer(container, roomName) {
+    container.innerHTML = "";
     const iframe = document.createElement("iframe");
     iframe.src = `https://meet.jit.si/${roomName}#config.prejoinConfig.enabled=false&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true&userInfo.displayName=%22Espectador%22`;
     iframe.allow = "camera; microphone; fullscreen; display-capture; autoplay";
@@ -713,6 +666,129 @@ document.addEventListener("DOMContentLoaded", () => {
     iframe.style.height = "100%";
     iframe.style.border = "none";
     container.appendChild(iframe);
+  }
+
+  function initStreamCreationModal() {
+    const modal = document.getElementById("stream-creator-modal");
+    const btnClose = document.getElementById("btn-close-creator-modal");
+    const btnCancel = document.getElementById("btn-cancel-create-stream");
+    const form = document.getElementById("form-create-stream");
+    const radioInputs = document.querySelectorAll('input[name="stream_mode"]');
+    const groupUrl = document.getElementById("group-stream-url");
+    const inputUrl = document.getElementById("stream-input-url");
+
+    radioInputs.forEach(radio => {
+      radio.addEventListener("change", () => {
+        document.querySelectorAll(".radio-card").forEach(c => c.classList.remove("active"));
+        radio.closest(".radio-card").classList.add("active");
+        if (radio.value === "social") {
+          groupUrl.classList.remove("hidden");
+          inputUrl.required = true;
+        } else {
+          groupUrl.classList.add("hidden");
+          inputUrl.required = false;
+        }
+      });
+    });
+
+    if (btnClose) btnClose.addEventListener("click", closeStreamCreatorModal);
+    if (btnCancel) btnCancel.addEventListener("click", closeStreamCreatorModal);
+    modal?.addEventListener("click", (e) => { if (e.target === modal) closeStreamCreatorModal(); });
+
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const location = document.getElementById("stream-input-location").value.trim();
+        const author = document.getElementById("stream-input-author").value.trim() || "Vecino en el punto";
+        const mode = document.querySelector('input[name="stream_mode"]:checked').value;
+        const url = inputUrl.value.trim();
+
+        if (!location) return;
+
+        const streamId = "stream-" + Date.now();
+        const timeNow = getCurrentTimeFormatted();
+
+        let newStream = {
+          id: streamId,
+          location: location,
+          author: author,
+          time: timeNow,
+          type: mode
+        };
+
+        if (mode === "camera") {
+          // Generar sala de Jitsi única
+          const randomId = Math.random().toString(36).substring(2, 8);
+          const cleanLoc = location.replace(/[^a-zA-Z0-9]/g, "");
+          const room = `ParoHuanuco_${cleanLoc}_${randomId}`;
+          newStream.room = room;
+
+          // Guardar y notificar
+          state.streams.unshift(newStream);
+          state.myActiveStreamId = streamId;
+          localStorage.setItem("monitor_my_stream_id", streamId);
+          saveStreams();
+
+          // Abrir la cámara del reportero en una pestaña para que comience a emitir
+          const broadcasterUrl = `https://meet.jit.si/${room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false&userInfo.displayName="${encodeURIComponent(author)}"`;
+          window.open(broadcasterUrl, "_blank");
+        } else {
+          // Modo enlace de redes sociales
+          newStream.url = url;
+          state.streams.unshift(newStream);
+          state.myActiveStreamId = streamId;
+          localStorage.setItem("monitor_my_stream_id", streamId);
+          saveStreams();
+        }
+
+        // Agregar reporte automático al Minuto a Minuto
+        addLiveFeedItem({
+          time: timeNow,
+          zoneId: "centro",
+          zoneName: location,
+          type: "urgente",
+          tag: "EN VIVO AHORA",
+          text: `Se inició una nueva transmisión en directo desde: ${location} por ${author}.`,
+          source: "Reporte Ciudadano"
+        });
+
+        closeStreamCreatorModal();
+        form.reset();
+
+        // Cambiar a la vista de En Vivo y sintonizar
+        const tabEnvivo = document.querySelector('.tab-btn[data-view="envivo"]');
+        if (tabEnvivo) tabEnvivo.click();
+
+        state.currentStreamId = streamId;
+        renderCitizenStreamsList();
+      });
+    }
+  }
+
+  function openStreamCreatorModal() {
+    document.getElementById("stream-creator-modal")?.classList.remove("hidden");
+  }
+
+  function closeStreamCreatorModal() {
+    document.getElementById("stream-creator-modal")?.classList.add("hidden");
+  }
+
+  function endMyStream() {
+    if (!state.myActiveStreamId) return;
+    if (confirm("¿Deseas finalizar y dar de baja tu transmisión en vivo?")) {
+      state.streams = state.streams.filter(s => s.id !== state.myActiveStreamId);
+      state.myActiveStreamId = null;
+      localStorage.removeItem("monitor_my_stream_id");
+      saveStreams();
+      state.currentStreamId = state.streams[0]?.id || null;
+      renderCitizenStreamsList();
+    }
+  }
+
+  function addLiveFeedItem(item) {
+    if (!APP_CONFIG.liveFeed) APP_CONFIG.liveFeed = [];
+    APP_CONFIG.liveFeed.unshift(item);
+    renderLiveFeed();
   }
 
   function renderZoneContextFeed(zoneId) {

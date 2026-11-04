@@ -30,23 +30,15 @@ const APP_CONFIG = {
     showModalOnLoad: true // Desplegar modal al abrir
   },
 
-  // Zonas / Frentes Informativos Estratégicos
-  // NOTA: Cambia activeStream a true SOLO cuando el reportero esté transmitiendo de verdad.
-  // Soporta: 'jitsi', 'youtube', 'facebook', 'iframe'
+  // Zonas / Frentes Territoriales (Para Chat y Organización)
   zones: [
     {
       id: "norte",
       name: "Zona Norte",
       sector: "Fonavi / Óvalo Pavletich / Vía Colectora",
       status: "Bloqueo Parcial",
-      statusType: "restringido", // 'bloqueo', 'restringido', 'libre'
-      reporter: "Móvil 01 - Fonavi",
-      activeStream: false, // <-- Cambiar a true cuando esté transmitiendo de verdad
-      streamType: "jitsi", // 'jitsi', 'youtube', 'facebook'
-      streamUrl: "https://meet.jit.si/ParoHuanuco_ZonaNorte_Oficial",
-      jitsiRoom: "ParoHuanuco_ZonaNorte_Oficial",
-      minnitRoom: "ParoHuanucoNorte",
-      description: "Vía de salida a Tingo María con tránsito de mototaxis lento por bloqueo intermitente."
+      statusType: "restringido",
+      minnitRoom: "ParoHuanucoNorte"
     },
     {
       id: "centro",
@@ -54,13 +46,7 @@ const APP_CONFIG = {
       sector: "Plaza de Armas / Mercado Central / Jr. Dos de Mayo",
       status: "Marcha en Avance",
       statusType: "bloqueo",
-      reporter: "Móvil 02 - Prensa Popular",
-      activeStream: true, // <-- Esta zona está activa con transmisión
-      streamType: "jitsi", // Si tienes link de YouTube pega el link aquí y pon streamType: 'youtube'
-      streamUrl: "https://meet.jit.si/ParoHuanuco_ZonaCentro_Oficial",
-      jitsiRoom: "ParoHuanuco_ZonaCentro_Oficial",
-      minnitRoom: "ParoHuanucoCentro",
-      description: "Comerciantes cerraron puestos en Mercado Central. Columna de manifestantes rumbo a la Plaza."
+      minnitRoom: "ParoHuanucoCentro"
     },
     {
       id: "sur",
@@ -68,15 +54,12 @@ const APP_CONFIG = {
       sector: "Cayhuayna / Puente San Sebastián / UDH - UNHEVAL",
       status: "Bloqueo Total",
       statusType: "bloqueo",
-      reporter: "Móvil 03 - Pillco Marca",
-      activeStream: false, // <-- Fuera del aire hasta que el reportero conecte
-      streamType: "jitsi",
-      streamUrl: "https://meet.jit.si/ParoHuanuco_ZonaSur_Oficial",
-      jitsiRoom: "ParoHuanuco_ZonaSur_Oficial",
-      minnitRoom: "ParoHuanucoSur",
-      description: "Puente San Sebastián y Óvalo de Cayhuayna completamente cerrados por piquetes de huelga."
+      minnitRoom: "ParoHuanucoSur"
     }
   ],
+
+  // Transmisiones en Vivo de la Ciudadanía (Comienza VACÍO, solo aparecen los que la gente inicia o comparte)
+  citizenStreams: [],
 
   // Puntos Georreferenciados para el Mapa de Bloqueos (Leaflet)
   mapPoints: [
