@@ -29,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initAlertTicker();
     initCitizenStreams();
+    initWebSocketSync();
     initMap();
     initLiveFeed();
     initChat();
@@ -565,10 +566,93 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // =========================================================================
+  // SINCRONIZACIÓN WEBSOCKETS EN TIEMPO REAL (CELULAR <-> PC Y EN VIVO)
+  // =========================================================================
+  const MQTT_SYNC = {
+    host: "broker.emqx.io",
+    port: 8084,
+    path: "/mqtt",
+    topic: "mirador_udh_paro/citizen_streams_v1",
+    client: null,
+    connected: false
+  };
+
+  function initWebSocketSync() {
+    if (typeof Paho === "undefined") {
+      console.warn("Librería Paho MQTT no encontrada, operando en modo local.");
+      return;
+    }
+
+    try {
+      const clientId = "mirador_" + Math.random().toString(16).substring(2, 10);
+      MQTT_SYNC.client = new Paho.MQTT.Client(MQTT_SYNC.host, MQTT_SYNC.port, MQTT_SYNC.path, clientId);
+
+      MQTT_SYNC.client.onConnectionLost = function(responseObject) {
+        MQTT_SYNC.connected = false;
+        if (responseObject.errorCode !== 0) {
+          console.warn("WebSocket reconectando en 3s...", responseObject.errorMessage);
+          setTimeout(initWebSocketSync, 3000);
+        }
+      };
+
+      MQTT_SYNC.client.onMessageArrived = function(message) {
+        try {
+          const payload = JSON.parse(message.payloadString);
+          if (Array.isArray(payload)) {
+            const currentStr = JSON.stringify(state.streams);
+            const newStr = JSON.stringify(payload);
+            if (currentStr !== newStr) {
+              state.streams = payload;
+              try { localStorage.setItem("monitor_citizen_streams", newStr); } catch (e) { }
+              renderCitizenStreamsList();
+            }
+          }
+        } catch (err) {
+          console.warn("Mensaje MQTT no es JSON:", err);
+        }
+      };
+
+      MQTT_SYNC.client.connect({
+        useSSL: true,
+        timeout: 10,
+        keepAliveInterval: 30,
+        onSuccess: function() {
+          MQTT_SYNC.connected = true;
+          console.log("🟢 WebSockets en Vivo Conectado a la Red.");
+          MQTT_SYNC.client.subscribe(MQTT_SYNC.topic, { qos: 1 });
+        },
+        onFailure: function(err) {
+          MQTT_SYNC.connected = false;
+          console.warn("Fallo al conectar WebSocket, reintentando...", err);
+          setTimeout(initWebSocketSync, 5000);
+        }
+      });
+    } catch (e) {
+      console.warn("Error en initWebSocketSync:", e);
+    }
+  }
+
+  function broadcastStreamsViaWebSocket() {
+    if (MQTT_SYNC.client && MQTT_SYNC.connected) {
+      try {
+        const payload = JSON.stringify(state.streams);
+        const msg = new Paho.MQTT.Message(payload);
+        msg.destinationName = MQTT_SYNC.topic;
+        msg.retained = true; // Retenido en broker: garantiza que quien abra la web reciba los en vivos activos
+        msg.qos = 1;
+        MQTT_SYNC.client.send(msg);
+      } catch (err) {
+        console.warn("Error enviando por WebSocket:", err);
+      }
+    }
+  }
+
   function saveStreams() {
     try {
       localStorage.setItem("monitor_citizen_streams", JSON.stringify(state.streams));
     } catch (e) { }
+    broadcastStreamsViaWebSocket();
   }
 
   function renderCitizenStreamsList() {
