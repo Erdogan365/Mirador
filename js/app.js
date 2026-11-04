@@ -670,17 +670,37 @@ document.addEventListener("DOMContentLoaded", () => {
     mediaHolder.innerHTML = "";
 
     // Renderizar Transmisión
-    externalBtn.href = stream.url;
-    if (stream.url.includes("youtu")) {
+    if (stream.type === "vdo" || stream.room) {
+      // VDO.Ninja: Cámara directa en tiempo real sin cuentas ni registros
+      const viewerUrl = `https://vdo.ninja/?view=${stream.room}&autoplay=1&cleanoutput=1&controls=1`;
+      externalBtn.href = viewerUrl;
+      externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Ver Pantalla Completa`;
+      embedVdoNinjaViewer(mediaHolder, stream.room);
+    } else if (stream.url && stream.url.includes("youtu")) {
+      externalBtn.href = stream.url;
       externalBtn.innerHTML = `<i class="fa-brands fa-youtube"></i> Ver en YouTube`;
       embedYouTubeLive(mediaHolder, stream.url);
-    } else if (stream.url.includes("facebook") || stream.url.includes("fb.watch")) {
+    } else if (stream.url && (stream.url.includes("facebook") || stream.url.includes("fb.watch"))) {
+      externalBtn.href = stream.url;
       externalBtn.innerHTML = `<i class="fa-brands fa-facebook"></i> Ver en Facebook`;
       embedFacebookLive(mediaHolder, stream.url);
     } else {
+      externalBtn.href = stream.url;
       externalBtn.innerHTML = `<i class="fa-solid fa-up-right-from-square"></i> Abrir Enlace`;
       embedGenericLive(mediaHolder, stream.url);
     }
+  }
+
+  function embedVdoNinjaViewer(container, roomName) {
+    container.innerHTML = "";
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://vdo.ninja/?view=${roomName}&autoplay=1&cleanoutput=1&controls=1`;
+    iframe.allow = "autoplay; camera; microphone; fullscreen; display-capture; picture-in-picture";
+    iframe.allowFullscreen = true;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "none";
+    container.appendChild(iframe);
   }
 
   function embedYouTubeLive(container, url) {
@@ -739,35 +759,97 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputLocation = document.getElementById("stream-input-location");
     const inputUrl = document.getElementById("stream-input-url");
     const inputAuthor = document.getElementById("stream-input-author");
+    const radioInputs = document.querySelectorAll('input[name="stream_mode"]');
+    const groupUrl = document.getElementById("group-stream-url");
+
+    // Modal de éxito reportero
+    const broadcastModal = document.getElementById("reporter-broadcast-modal");
+    const btnCloseBroadcast = document.getElementById("btn-close-reporter-broadcast");
+    const btnDoneBroadcast = document.getElementById("btn-done-reporter-broadcast");
+    const btnOpenCameraNow = document.getElementById("btn-open-camera-now");
+    const btnSendCameraWa = document.getElementById("btn-send-camera-wa");
 
     if (btnClose) btnClose.addEventListener("click", closeStreamCreatorModal);
     if (btnCancel) btnCancel.addEventListener("click", closeStreamCreatorModal);
     modal?.addEventListener("click", (e) => { if (e.target === modal) closeStreamCreatorModal(); });
 
+    if (btnCloseBroadcast) btnCloseBroadcast.addEventListener("click", () => broadcastModal.classList.add("hidden"));
+    if (btnDoneBroadcast) btnDoneBroadcast.addEventListener("click", () => broadcastModal.classList.add("hidden"));
+    broadcastModal?.addEventListener("click", (e) => { if (e.target === broadcastModal) broadcastModal.classList.add("hidden"); });
+
+    // Alternar modo de transmisión
+    radioInputs.forEach(radio => {
+      radio.addEventListener("change", () => {
+        document.querySelectorAll(".radio-card").forEach(c => c.classList.remove("active"));
+        radio.closest(".radio-card").classList.add("active");
+        if (radio.value === "social") {
+          groupUrl.classList.remove("hidden");
+          inputUrl.required = true;
+        } else {
+          groupUrl.classList.add("hidden");
+          inputUrl.required = false;
+        }
+      });
+    });
+
     if (form) {
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         const location = inputLocation.value.trim();
-        const url = inputUrl.value.trim();
         const author = inputAuthor.value.trim() || "Vecino / Reportero";
+        const mode = document.querySelector('input[name="stream_mode"]:checked').value;
+        const url = inputUrl.value.trim();
 
-        if (!location || !url) return;
+        if (!location) return;
 
         const streamId = "stream-" + Date.now();
         const timeNow = getCurrentTimeFormatted();
 
-        const newStream = {
+        let newStream = {
           id: streamId,
           location: location,
           author: author,
           time: timeNow,
-          url: url
+          type: mode
         };
 
-        state.streams.unshift(newStream);
-        state.myActiveStreamId = streamId;
-        localStorage.setItem("monitor_my_stream_id", streamId);
-        saveStreams();
+        if (mode === "vdo") {
+          // Generar sala única de VDO.Ninja (sin registros, sin cuentas)
+          const randomId = Math.random().toString(36).substring(2, 8);
+          const cleanLoc = location.replace(/[^a-zA-Z0-9]/g, "");
+          const room = `ParoHco_${cleanLoc}_${randomId}`;
+          newStream.room = room;
+
+          // Enlace del reportero para emitir (con cámara trasera sugerida y optimización de datos móviles)
+          const broadcasterUrl = `https://vdo.ninja/?push=${room}&facing=back&quality=2&bitrate=800&audiobitrate=64&label=${encodeURIComponent(author)}`;
+          newStream.broadcasterUrl = broadcasterUrl;
+
+          state.streams.unshift(newStream);
+          state.myActiveStreamId = streamId;
+          localStorage.setItem("monitor_my_stream_id", streamId);
+          saveStreams();
+
+          // Configurar botones del modal de éxito para el reportero
+          btnOpenCameraNow.href = broadcasterUrl;
+          const waMsg = encodeURIComponent(`Hola, para transmitir en vivo desde ${location}, abre este enlace en tu celular y dale a "Compartir Cámara": ${broadcasterUrl}`);
+          btnSendCameraWa.href = `https://wa.me/?text=${waMsg}`;
+
+          closeStreamCreatorModal();
+          form.reset();
+          broadcastModal.classList.remove("hidden");
+        } else {
+          // Modo Redes Sociales (Facebook Live o YouTube)
+          if (!url) return;
+          newStream.url = url;
+
+          state.streams.unshift(newStream);
+          state.myActiveStreamId = streamId;
+          localStorage.setItem("monitor_my_stream_id", streamId);
+          saveStreams();
+
+          closeStreamCreatorModal();
+          form.reset();
+        }
 
         // Agregar reporte automático al Minuto a Minuto
         addLiveFeedItem({
@@ -776,12 +858,9 @@ document.addEventListener("DOMContentLoaded", () => {
           zoneName: location,
           type: "urgente",
           tag: "EN VIVO",
-          text: `Se compartió una transmisión en vivo desde: ${location} por ${author}.`,
+          text: `Se inició una nueva transmisión en directo desde: ${location} por ${author}.`,
           source: author
         });
-
-        closeStreamCreatorModal();
-        form.reset();
 
         // Cambiar a la vista de En Vivo y sintonizar
         const tabEnvivo = document.querySelector('.tab-btn[data-view="envivo"]');

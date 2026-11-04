@@ -311,35 +311,80 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL COMPARTIR EN VIVO CIUDADANO ==================== -->
+  <!-- ==================== MODAL TRANSMITIR EN VIVO (VDO.NINJA O REDES) ==================== -->
   <div id="stream-creator-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-tower-broadcast"></i> Compartir Transmisión en Vivo</h3>
+        <h3><i class="fa-solid fa-tower-broadcast"></i> Iniciar o Compartir En Vivo</h3>
         <button class="btn-close-modal" id="btn-close-creator-modal">&times;</button>
       </div>
       <form id="form-create-stream" class="creator-form">
         <div class="form-group">
-          <label><i class="fa-solid fa-location-dot"></i> ¿En qué punto o calle es la transmisión?</label>
+          <label><i class="fa-solid fa-location-dot"></i> ¿En qué punto o calle estás?</label>
           <input type="text" id="stream-input-location" placeholder="Ej. Óvalo Cayhuayna, Puente Calicanto, Plaza..." required maxlength="60">
         </div>
 
         <div class="form-group">
-          <label><i class="fa-solid fa-link"></i> Enlace de tu Transmisión (Facebook Live, YouTube o TikTok):</label>
-          <input type="url" id="stream-input-url" placeholder="Pega el enlace de Facebook o YouTube aquí" required>
-          <span style="font-size:0.7rem; color:#94a3b8;">💡 Puedes copiar el link del directo desde la app de Facebook o YouTube y pegarlo aquí.</span>
+          <label><i class="fa-solid fa-user"></i> Tu nombre o medio (opcional):</label>
+          <input type="text" id="stream-input-author" placeholder="Ej. Prensa Huánuco, Vecino de Pillco Marca..." maxlength="35">
         </div>
 
         <div class="form-group">
-          <label><i class="fa-solid fa-user"></i> Tu nombre, página o colectivo (opcional):</label>
-          <input type="text" id="stream-input-author" placeholder="Ej. Prensa Huánuco, Vecino de Pillco Marca..." maxlength="35">
+          <label><i class="fa-solid fa-video"></i> ¿Cómo vas a transmitir?</label>
+          <div class="stream-type-selector">
+            <label class="radio-card active" id="card-mode-vdo">
+              <input type="radio" name="stream_mode" value="vdo" checked>
+              <div class="radio-content">
+                <strong><i class="fa-solid fa-camera"></i> Cámara Directa del Celular (VDO.Ninja)</strong>
+                <span>Cero registros. Abre la cámara trasera de tu móvil y transmite con 0.3s de latencia.</span>
+              </div>
+            </label>
+            <label class="radio-card" id="card-mode-social">
+              <input type="radio" name="stream_mode" value="social">
+              <div class="radio-content">
+                <strong><i class="fa-brands fa-facebook"></i> Enlace de Facebook Live o YouTube</strong>
+                <span>Pega el enlace si ya estás transmitiendo en directo en redes sociales.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group hidden" id="group-stream-url">
+          <label><i class="fa-solid fa-link"></i> Enlace de tu Live (Facebook o YouTube):</label>
+          <input type="url" id="stream-input-url" placeholder="https://www.facebook.com/... o https://youtube.com/...">
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn-secondary" id="btn-cancel-create-stream">Cancelar</button>
-          <button type="submit" class="btn-primary"><i class="fa-solid fa-circle-check"></i> Publicar en Vivo para Todos</button>
+          <button type="submit" class="btn-primary" id="btn-submit-stream"><i class="fa-solid fa-circle-play"></i> Iniciar y Publicar En Vivo</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE ÉXITO PARA EL REPORTERO ==================== -->
+  <div id="reporter-broadcast-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 style="color:#34d399;"><i class="fa-solid fa-circle-check"></i> ¡Transmisión Creada con Éxito!</h3>
+        <button class="btn-close-modal" id="btn-close-reporter-broadcast">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Tu señal en vivo ya está publicada en la web para todos los ciudadanos.</p>
+        <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; margin:12px 0;">
+          <strong style="color:#fff; display:block; margin-bottom:4px;">Paso para transmitir:</strong>
+          <span style="font-size:0.8rem; color:#cbd5e1;">Toca el botón verde para abrir la cámara de tu celular y darle <em>"Compartir Cámara"</em>. ¡No necesitas registrarte ni instalar nada!</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="flex-direction:column; gap:8px;">
+        <a id="btn-open-camera-now" href="#" target="_blank" class="btn-primary" style="width:100%; justify-content:center; padding:10px;">
+          <i class="fa-solid fa-camera"></i> Abrir mi Cámara para Emitir
+        </a>
+        <a id="btn-send-camera-wa" href="#" target="_blank" class="btn-whatsapp" style="width:100%; justify-content:center; padding:8px;">
+          <i class="fa-brands fa-whatsapp"></i> Enviar este Link de Cámara a un Reportero
+        </a>
+        <button type="button" class="btn-secondary" id="btn-done-reporter-broadcast" style="width:100%;">Ver Transmisión en la Web</button>
+      </div>
     </div>
   </div>
 
